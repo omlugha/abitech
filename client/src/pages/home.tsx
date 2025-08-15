@@ -36,7 +36,6 @@ export default function Home() {
   const [copiedJson, setCopiedJson] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [autoPlayActive, setAutoPlayActive] = useState(false);
-  const [isAutoLoading, setIsAutoLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
 
@@ -77,7 +76,7 @@ export default function Home() {
   // Auto-play every new song that loads
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !song?.links?.stream) return;
+    if (!audio || !song?.links?.stream || isLoading) return;
 
     const playNewSong = async () => {
       try {
@@ -87,12 +86,10 @@ export default function Home() {
         
         // Always try to auto-play the new song if auto-play is active
         if (autoPlayActive) {
-          setIsAutoLoading(false); // Reset loading state
           await audio.play();
         }
       } catch (error) {
         console.error("Auto-play failed:", error);
-        setIsAutoLoading(false);
         // Try again after a short delay
         setTimeout(() => {
           if (audio.paused && autoPlayActive) {
@@ -103,30 +100,17 @@ export default function Home() {
     };
 
     playNewSong();
-  }, [song?.id, autoPlayActive]);
+  }, [song?.id, autoPlayActive, isLoading]);
 
-  // Auto-load next song when current song ends
-  const autoLoadNextSong = async () => {
+  // Simple auto-load next song function
+  const autoLoadNextSong = () => {
     if (!autoPlayActive) return;
     
-    setIsAutoLoading(true);
+    console.log("Auto-loading next song");
     setIsPlaying(false);
     
-    // Increment refresh key to trigger new song fetch
+    // Simple increment to trigger new song fetch
     setRefreshKey(prev => prev + 1);
-    
-    // Trigger refetch to get new song immediately
-    try {
-      await refetch();
-    } catch (error) {
-      console.error("Failed to fetch next song:", error);
-      setIsAutoLoading(false);
-      // Retry after a delay
-      setTimeout(() => {
-        setRefreshKey(prev => prev + 1);
-        refetch();
-      }, 1000);
-    }
   };
 
   // Audio event listeners for continuous auto-play
@@ -137,13 +121,10 @@ export default function Home() {
     const handlePlay = () => {
       setIsPlaying(true);
       setAutoPlayActive(true);
-      setIsAutoLoading(false);
     };
 
     const handlePause = () => {
-      if (!isAutoLoading) {
-        setIsPlaying(false);
-      }
+      setIsPlaying(false);
     };
 
     const handleEnded = () => {
@@ -160,7 +141,7 @@ export default function Home() {
     };
 
     const handleLoadedData = () => {
-      if (autoPlayActive && audio.paused && !isAutoLoading) {
+      if (autoPlayActive && audio.paused) {
         audio.play().catch(e => {
           console.error("Auto-play on loadeddata failed:", e);
         });
@@ -191,13 +172,13 @@ export default function Home() {
       audio.removeEventListener('loadeddata', handleLoadedData);
       audio.removeEventListener('error', handleError);
     };
-  }, [autoPlayActive, isAutoLoading]);
+  }, [autoPlayActive]);
 
   // Handle page visibility for continuous playback
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && autoPlayActive && audioRef.current && song?.links?.stream) {
-        if (audioRef.current.paused && !isAutoLoading) {
+        if (audioRef.current.paused) {
           audioRef.current.play().catch(e => {
             console.error("Auto-play on visibility change failed:", e);
           });
@@ -207,20 +188,17 @@ export default function Home() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [autoPlayActive, song, isAutoLoading]);
+  }, [autoPlayActive, song]);
 
-  const handleNext = async () => {
+  // Simplified next/previous handlers
+  const handleNext = () => {
     setAutoPlayActive(true);
-    setIsAutoLoading(true);
     setRefreshKey(prev => prev + 1);
-    await refetch();
   };
 
-  const handlePrevious = async () => {
+  const handlePrevious = () => {
     setAutoPlayActive(true);
-    setIsAutoLoading(true);
     setRefreshKey(prev => prev + 1);
-    await refetch();
   };
 
   const handleDownload = () => {
@@ -236,11 +214,9 @@ export default function Home() {
     }
   };
 
-  const handleRefresh = async () => {
+  const handleRefresh = () => {
     setAutoPlayActive(true);
-    setIsAutoLoading(true);
     setRefreshKey(prev => prev + 1);
-    await refetch();
   };
 
   const copyToClipboard = async (text: string, type: 'url' | 'json') => {
@@ -309,12 +285,10 @@ export default function Home() {
         {/* Main Content Card */}
         <Card className="glass border-slate-700 w-full max-w-lg mx-auto mb-8">
           <CardContent className="p-6 md:p-8">
-            {(isLoading || isAutoLoading) && (
+            {isLoading && (
               <div className="text-center py-8" data-testid="loading-state">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                <p className="text-slate-400">
-                  {isAutoLoading ? "Auto-loading next track..." : "Fetching random NCS track..."}
-                </p>
+                <p className="text-slate-400">Loading track...</p>
               </div>
             )}
 
@@ -330,7 +304,7 @@ export default function Home() {
               </div>
             )}
 
-            {song && !isLoading && !isAutoLoading && (
+            {song && !isLoading && (
               <div data-testid="song-content">
                 {/* Song Thumbnail */}
                 <div className="relative mb-6">
@@ -357,7 +331,7 @@ export default function Home() {
                   )}
 
                   {/* Auto-play status */}
-                  {autoPlayActive && !isPlaying && !isAutoLoading && (
+                  {autoPlayActive && !isPlaying && (
                     <div className="absolute top-4 right-4 bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
                       <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
                       <span>Auto-Play Ready</span>
@@ -392,7 +366,7 @@ export default function Home() {
                     onClick={handlePrevious}
                     variant="outline"
                     className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 border-slate-600"
-                    disabled={isAutoLoading}
+                    disabled={isLoading}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                       <polygon points="19 20 9 12 19 4 19 20"></polygon>
@@ -404,7 +378,7 @@ export default function Home() {
                     onClick={handleNext}
                     variant="outline"
                     className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 border-slate-600"
-                    disabled={isAutoLoading}
+                    disabled={isLoading}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                       <polygon points="5 4 15 12 5 20 5 4"></polygon>
@@ -443,7 +417,7 @@ export default function Home() {
           </a>
         </div>
 
-            {/* API Documentation */}
+        {/* API Documentation */}
         <Card className="glass border-slate-700 w-full max-w-lg mx-auto mt-8">
           <CardContent className="p-6">
             <h3 className="font-bold text-lg mb-4 gradient-text">API Endpoint</h3>
