@@ -4,18 +4,73 @@
  * NCS Song Fetcher CLI
  * Command-line interface for fetching and downloading NCS songs
  * Compatible with Render (Background Worker) and Vercel (Serverless Function)
+ * ES Modules (import/export) version
  */
 
-// Import statements modified for CommonJS compatibility
-const { 
+import { 
     fetchTrendingSongs, 
     searchSongs, 
     getRandomSong, 
     formatSongData, 
     displaySongInfo,
     validateSongUrls 
-} = require('./utils/ncs.js');
-const { downloadMP3, checkDownloadDirectory } = require('./utils/download.js');
+} from './utils/ncs.js';
+import { downloadMP3, checkDownloadDirectory } from './utils/download.js';
+
+/**
+ * Display help information
+ */
+function displayHelp() {
+    console.log('🎵 NCS Song Fetcher CLI');
+    console.log('========================');
+    console.log('');
+    console.log('Usage:');
+    console.log('  node cli.js [command] [options]');
+    console.log('');
+    console.log('Commands:');
+    console.log('  trending           Fetch trending NCS songs (default)');
+    console.log('  search <query>     Search for specific songs');
+    console.log('');
+    console.log('Options:');
+    console.log('  --download (-d)    Download the selected song');
+    console.log('  --help (-h)        Show this help message');
+    console.log('');
+    console.log('Environment Variables:');
+    console.log('  DOWNLOAD_ENABLED=true    Enable automatic downloading');
+    console.log('  DOWNLOAD_DIR=path       Custom download directory');
+}
+
+/**
+ * Handle MP3 file download
+ * @param {Object} songData - Formatted song data
+ */
+async function handleDownload(songData) {
+    try {
+        // Check if download directory is writable
+        if (!checkDownloadDirectory()) {
+            throw new Error('Download directory is not accessible');
+        }
+
+        // Generate filename (sanitize for filesystem)
+        const sanitize = (str) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const filename = `${sanitize(songData.artist)}_${sanitize(songData.title)}.mp3`;
+        
+        console.log('⬇️ Starting MP3 download...');
+        
+        const downloadPath = await downloadMP3(
+            songData.download_url, 
+            filename, 
+            process.env.DOWNLOAD_DIR || './downloads'
+        );
+        
+        console.log(`🎵 Song downloaded successfully!`);
+        console.log(`📂 Location: ${downloadPath}`);
+        
+    } catch (error) {
+        console.error('❌ Download failed:', error.message);
+        console.log('🔗 You can still use the stream URL to listen online');
+    }
+}
 
 /**
  * Main CLI function
@@ -104,61 +159,6 @@ async function main() {
     }
 }
 
-/**
- * Handle MP3 file download
- * @param {Object} songData - Formatted song data
- */
-async function handleDownload(songData) {
-    try {
-        // Check if download directory is writable
-        if (!checkDownloadDirectory()) {
-            throw new Error('Download directory is not accessible');
-        }
-
-        // Generate filename (sanitize for filesystem)
-        const sanitize = (str) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const filename = `${sanitize(songData.artist)}_${sanitize(songData.title)}.mp3`;
-        
-        console.log('⬇️ Starting MP3 download...');
-        
-        const downloadPath = await downloadMP3(
-            songData.download_url, 
-            filename, 
-            process.env.DOWNLOAD_DIR || './downloads'
-        );
-        
-        console.log(`🎵 Song downloaded successfully!`);
-        console.log(`📂 Location: ${downloadPath}`);
-        
-    } catch (error) {
-        console.error('❌ Download failed:', error.message);
-        console.log('🔗 You can still use the stream URL to listen online');
-    }
-}
-
-/**
- * Display help information
- */
-function displayHelp() {
-    console.log('🎵 NCS Song Fetcher CLI');
-    console.log('========================');
-    console.log('');
-    console.log('Usage:');
-    console.log('  node cli.js [command] [options]');
-    console.log('');
-    console.log('Commands:');
-    console.log('  trending           Fetch trending NCS songs (default)');
-    console.log('  search <query>     Search for specific songs');
-    console.log('');
-    console.log('Options:');
-    console.log('  --download (-d)    Download the selected song');
-    console.log('  --help (-h)        Show this help message');
-    console.log('');
-    console.log('Environment Variables:');
-    console.log('  DOWNLOAD_ENABLED=true    Enable automatic downloading');
-    console.log('  DOWNLOAD_DIR=path       Custom download directory');
-}
-
 // Handle uncaught errors
 process.on('uncaughtException', (error) => {
     console.error('\n💥 Uncaught Exception:', error.message);
@@ -171,12 +171,12 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Run the main function
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
     main();
 }
 
 // Export for Vercel Serverless Function compatibility
-module.exports = async (req, res) => {
+export default async (req, res) => {
     if (req.method === 'POST') {
         // For Vercel - handle HTTP requests
         try {
