@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * NCS Song Fetcher CLI - Render/Background Worker Version
- * This is optimized for Render's Background Worker service type
+ * NCS Song Fetcher - Render-Compatible Version
+ * Works as both CLI and persistent worker
  */
 
 import { 
@@ -16,148 +16,167 @@ import {
 import { downloadMP3, checkDownloadDirectory } from './utils/download.js';
 
 // Configuration
-const DEFAULT_PAGES_TO_FETCH = 5;
+const KEEP_ALIVE = process.env.RENDER ? true : false;
+const DEFAULT_PAGES = 5;
 
 /**
  * Display help information
  */
-function displayHelp() {
-    console.log('🎵 NCS Song Fetcher CLI');
-    console.log('========================');
-    console.log('\nUsage:');
-    console.log('  node cli.js [command] [options]');
-    console.log('\nCommands:');
-    console.log('  trending           Fetch trending NCS songs (default)');
-    console.log('  search <query>     Search for specific songs');
-    console.log('\nOptions:');
-    console.log('  --download (-d)    Download the selected song');
-    console.log('  --pages <number>   Number of pages to fetch (default: 5)');
-    console.log('  --help (-h)        Show this help message');
-    console.log('\nEnvironment Variables:');
-    console.log('  DOWNLOAD_ENABLED=true    Enable automatic downloading');
-    console.log('  DOWNLOAD_DIR=path       Custom download directory');
+function showHelp() {
+    console.log(`
+🎵 NCS Song Fetcher - Render Edition
+================================
+
+Usage:
+  node cli.js [command] [options]
+
+Commands:
+  trending           Fetch trending songs (default)
+  search <query>     Search for specific songs
+
+Options:
+  --download (-d)    Download the selected song
+  --pages <number>   Number of pages to fetch (default: ${DEFAULT_PAGES})
+  --interval <mins>  Run repeatedly (for Render, default: 0 = run once)
+  --help (-h)        Show this help
+
+Env Vars:
+  DOWNLOAD_ENABLED   Set to 'true' to enable downloads
+  DOWNLOAD_DIR       Custom download directory
+    `);
 }
 
 /**
- * Handle MP3 file download
+ * Main application logic
  */
-async function handleDownload(songData) {
+async function fetchAndProcess(options) {
     try {
-        if (!checkDownloadDirectory()) {
-            throw new Error('Download directory not accessible');
+        console.log('🔍 Fetching songs...');
+        
+        const songs = options.query 
+            ? await searchSongs(options.query)
+            : await fetchTrendingSongs(options.pages);
+
+        if (!songs.length) {
+            console.log('❌ No songs found');
+            return;
         }
 
-        const sanitize = (str) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-        const filename = `${sanitize(songData.artist)}_${sanitize(songData.title)}.mp3`;
-        
-        console.log('⬇️ Starting download...');
-        const downloadPath = await downloadMP3(
-            songData.download_url, 
-            filename, 
-            process.env.DOWNLOAD_DIR || './downloads'
-        );
-        
-        console.log(`✅ Downloaded: ${downloadPath}`);
+        const song = getRandomSong(songs);
+        if (!validateSongUrls(song)) {
+            throw new Error('Invalid song URLs');
+        }
+
+        const songInfo = formatSongData(song);
+        displaySongInfo(songInfo);
+
+        if (options.download && songInfo.download_url) {
+            await handleDownload(songInfo);
+        }
+
+        console.log('✅ Operation completed');
     } catch (error) {
-        console.error('❌ Download failed:', error.message);
+        console.error('❌ Error:', error.message);
     }
+}
+
+/**
+ * Handle file download
+ */
+async function handleDownload(songData) {
+    const sanitize = (str) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const filename = `${sanitize(songData.artist)}_${sanitize(songData.title)}.mp3`;
+    
+    console.log(`⬇️ Downloading ${filename}...`);
+    await downloadMP3(
+        songData.download_url,
+        filename,
+        process.env.DOWNLOAD_DIR || './downloads'
+    );
+    console.log('📥 Download complete');
 }
 
 /**
  * Parse command line arguments
  */
-function parseArgs() {
+function parseOptions() {
     const args = process.argv.slice(2);
-    const result = {
+    const options = {
         command: 'trending',
         query: '',
-        download: false,
-        pages: DEFAULT_PAGES_TO_FETCH
+        download: process.env.DOWNLOAD_ENABLED === 'true',
+        pages: DEFAULT_PAGES,
+        interval: 0
     };
 
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         switch (arg) {
             case 'search':
-                result.command = 'search';
-                result.query = args.slice(i + 1).join(' ');
-                return result;
-            case 'trending':
-                result.command = 'trending';
-                break;
+                options.query = args.slice(i + 1).join(' ');
+                return options;
             case '--download':
             case '-d':
-                result.download = true;
+                options.download = true;
                 break;
             case '--pages':
-                result.pages = parseInt(args[i + 1]) || DEFAULT_PAGES_TO_FETCH;
-                i++;
+                options.pages = parseInt(args[++i]) || DEFAULT_PAGES;
+                break;
+            case '--interval':
+                options.interval = parseInt(args[++i]) || 0;
                 break;
             case '--help':
             case '-h':
-                displayHelp();
+                showHelp();
                 process.exit(0);
         }
     }
-    return result;
+    return options;
 }
 
 /**
- * Main execution function
+ * Run the application with proper Render compatibility
  */
 async function run() {
-    try {
-        console.log('🚀 Starting NCS Song Fetcher');
-        const { command, query, download, pages } = parseArgs();
+    const options = parseOptions();
+    
+    if (options.interval > 0) {
+        // Continuous mode for Render
+        console.log(`🔄 Running every ${options.interval} minutes`);
+        const intervalMs = options.interval * 60 * 1000;
+        
+        const runInterval = async () => {
+            await fetchAndProcess(options);
+            console.log(`⏳ Next run in ${options.interval} minutes...`);
+        };
 
-        // Fetch songs based on command
-        const songs = command === 'search' 
-            ? await searchSongs(query) 
-            : await fetchTrendingSongs(pages);
-
-        if (!songs.length) {
-            console.log('🔍 No songs found');
-            return;
-        }
-
-        // Select and display song
-        const selectedSong = getRandomSong(songs);
-        if (!validateSongUrls(selectedSong)) {
-            throw new Error('Selected song has no valid URLs');
-        }
-
-        const songData = formatSongData(selectedSong);
-        displaySongInfo(songData);
-
-        // Handle download if requested
-        const shouldDownload = download || process.env.DOWNLOAD_ENABLED === 'true';
-        if (shouldDownload && songData.download_url) {
-            await handleDownload(songData);
-        }
-
-        console.log('\n🎉 Operation completed successfully');
-
-    } catch (error) {
-        console.error('\n❌ Error:', error.message);
-        process.exitCode = 1;
-    } finally {
-        // Proper cleanup for Render
-        if (process.env.RENDER) {
-            console.log('🛑 Render Background Worker shutting down');
-            process.exit(process.exitCode || 0);
+        // Immediate first run
+        await runInterval();
+        
+        // Set up periodic execution
+        setInterval(runInterval, intervalMs);
+    } else {
+        // Single run mode
+        await fetchAndProcess(options);
+        
+        if (KEEP_ALIVE) {
+            // Keep process alive for Render
+            console.log('🌐 Process kept alive for Render');
+            setInterval(() => {}, 60000); // Empty interval to keep alive
+        } else {
+            process.exit(0);
         }
     }
 }
 
-// Error handlers
-process.on('uncaughtException', (error) => {
-    console.error('💥 Uncaught Exception:', error.message);
+// Error handling
+process.on('uncaughtException', (err) => {
+    console.error('💥 Critical Error:', err.message);
     process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
-    console.error('💥 Unhandled Rejection:', reason);
-    process.exit(1);
+    console.error('⚠️ Unhandled Rejection:', reason);
 });
 
 // Start the application
