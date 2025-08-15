@@ -36,6 +36,7 @@ export default function Home() {
   const [copiedJson, setCopiedJson] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [autoPlayActive, setAutoPlayActive] = useState(false);
+  const [isAutoLoading, setIsAutoLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
 
@@ -84,12 +85,14 @@ export default function Home() {
         audio.src = song.links.stream;
         audio.load();
         
-        // Always try to auto-play the new song
+        // Always try to auto-play the new song if auto-play is active
         if (autoPlayActive) {
+          setIsAutoLoading(false); // Reset loading state
           await audio.play();
         }
       } catch (error) {
         console.error("Auto-play failed:", error);
+        setIsAutoLoading(false);
         // Try again after a short delay
         setTimeout(() => {
           if (audio.paused && autoPlayActive) {
@@ -100,7 +103,31 @@ export default function Home() {
     };
 
     playNewSong();
-  }, [song?.id, autoPlayActive]); // Use song.id to detect actual song changes
+  }, [song?.id, autoPlayActive]);
+
+  // Auto-load next song when current song ends
+  const autoLoadNextSong = async () => {
+    if (!autoPlayActive) return;
+    
+    setIsAutoLoading(true);
+    setIsPlaying(false);
+    
+    // Increment refresh key to trigger new song fetch
+    setRefreshKey(prev => prev + 1);
+    
+    // Trigger refetch to get new song immediately
+    try {
+      await refetch();
+    } catch (error) {
+      console.error("Failed to fetch next song:", error);
+      setIsAutoLoading(false);
+      // Retry after a delay
+      setTimeout(() => {
+        setRefreshKey(prev => prev + 1);
+        refetch();
+      }, 1000);
+    }
+  };
 
   // Audio event listeners for continuous auto-play
   useEffect(() => {
@@ -109,21 +136,22 @@ export default function Home() {
 
     const handlePlay = () => {
       setIsPlaying(true);
-      setAutoPlayActive(true); // Ensure auto-play stays active
+      setAutoPlayActive(true);
+      setIsAutoLoading(false);
     };
 
     const handlePause = () => {
-      setIsPlaying(false);
+      if (!isAutoLoading) {
+        setIsPlaying(false);
+      }
     };
 
     const handleEnded = () => {
-      setIsPlaying(false);
-      // Automatically go to next song when current song ends
-      handleNext();
+      console.log("Song ended - auto-loading next song");
+      autoLoadNextSong();
     };
 
     const handleCanPlayThrough = () => {
-      // Auto-play when song is ready to play
       if (autoPlayActive && audio.paused) {
         audio.play().catch(e => {
           console.error("Auto-play on canplaythrough failed:", e);
@@ -132,11 +160,19 @@ export default function Home() {
     };
 
     const handleLoadedData = () => {
-      // Auto-play when song data is loaded
-      if (autoPlayActive && audio.paused) {
+      if (autoPlayActive && audio.paused && !isAutoLoading) {
         audio.play().catch(e => {
           console.error("Auto-play on loadeddata failed:", e);
         });
+      }
+    };
+
+    const handleError = () => {
+      console.error("Audio error - trying next song");
+      if (autoPlayActive) {
+        setTimeout(() => {
+          autoLoadNextSong();
+        }, 1000);
       }
     };
 
@@ -145,6 +181,7 @@ export default function Home() {
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('canplaythrough', handleCanPlayThrough);
     audio.addEventListener('loadeddata', handleLoadedData);
+    audio.addEventListener('error', handleError);
 
     return () => {
       audio.removeEventListener('play', handlePlay);
@@ -152,14 +189,15 @@ export default function Home() {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('canplaythrough', handleCanPlayThrough);
       audio.removeEventListener('loadeddata', handleLoadedData);
+      audio.removeEventListener('error', handleError);
     };
-  }, [autoPlayActive]);
+  }, [autoPlayActive, isAutoLoading]);
 
   // Handle page visibility for continuous playback
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && autoPlayActive && audioRef.current && song?.links?.stream) {
-        if (audioRef.current.paused) {
+        if (audioRef.current.paused && !isAutoLoading) {
           audioRef.current.play().catch(e => {
             console.error("Auto-play on visibility change failed:", e);
           });
@@ -169,24 +207,23 @@ export default function Home() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [autoPlayActive, song]);
+  }, [autoPlayActive, song, isAutoLoading]);
 
-  const handleNext = () => {
-    setRefreshKey(prev => prev + 1);
-    refetch();
-    // Ensure auto-play stays active for next song
+  const handleNext = async () => {
     setAutoPlayActive(true);
+    setIsAutoLoading(true);
+    setRefreshKey(prev => prev + 1);
+    await refetch();
   };
 
-  const handlePrevious = () => {
-    setRefreshKey(prev => prev + 1);
-    refetch();
-    // Ensure auto-play stays active for previous song
+  const handlePrevious = async () => {
     setAutoPlayActive(true);
+    setIsAutoLoading(true);
+    setRefreshKey(prev => prev + 1);
+    await refetch();
   };
 
   const handleDownload = () => {
-    // Enable auto-play on download click (user interaction)
     setAutoPlayActive(true);
     
     if (song?.links?.download) {
@@ -199,15 +236,14 @@ export default function Home() {
     }
   };
 
-  const handleRefresh = () => {
-    setRefreshKey(prev => prev + 1);
-    refetch();
-    // Ensure auto-play stays active for refreshed song
+  const handleRefresh = async () => {
     setAutoPlayActive(true);
+    setIsAutoLoading(true);
+    setRefreshKey(prev => prev + 1);
+    await refetch();
   };
 
   const copyToClipboard = async (text: string, type: 'url' | 'json') => {
-    // Enable auto-play on copy click (user interaction)
     setAutoPlayActive(true);
     
     try {
@@ -235,7 +271,6 @@ export default function Home() {
   };
 
   const toggleJsonResponse = () => {
-    // Enable auto-play on toggle click (user interaction)
     setAutoPlayActive(true);
     setShowJsonResponse(!showJsonResponse);
   };
@@ -274,10 +309,12 @@ export default function Home() {
         {/* Main Content Card */}
         <Card className="glass border-slate-700 w-full max-w-lg mx-auto mb-8">
           <CardContent className="p-6 md:p-8">
-            {isLoading && (
+            {(isLoading || isAutoLoading) && (
               <div className="text-center py-8" data-testid="loading-state">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500 mx-auto mb-4"></div>
-                <p className="text-slate-400">Fetching random NCS track...</p>
+                <p className="text-slate-400">
+                  {isAutoLoading ? "Auto-loading next track..." : "Fetching random NCS track..."}
+                </p>
               </div>
             )}
 
@@ -293,7 +330,7 @@ export default function Home() {
               </div>
             )}
 
-            {song && !isLoading && (
+            {song && !isLoading && !isAutoLoading && (
               <div data-testid="song-content">
                 {/* Song Thumbnail */}
                 <div className="relative mb-6">
@@ -315,7 +352,15 @@ export default function Home() {
                   {isPlaying && (
                     <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
                       <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                      <span>Playing</span>
+                      <span>Auto Playing</span>
+                    </div>
+                  )}
+
+                  {/* Auto-play status */}
+                  {autoPlayActive && !isPlaying && !isAutoLoading && (
+                    <div className="absolute top-4 right-4 bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                      <span>Auto-Play Ready</span>
                     </div>
                   )}
                 </div>
@@ -329,7 +374,7 @@ export default function Home() {
                   isPlaying={isPlaying}
                 />
 
-                {/* Action Buttons - REMOVED PLAY/PAUSE BUTTON */}
+                {/* Action Buttons */}
                 <div className="space-y-3 mb-6">
                   <Button 
                     onClick={handleDownload}
@@ -347,6 +392,7 @@ export default function Home() {
                     onClick={handlePrevious}
                     variant="outline"
                     className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 border-slate-600"
+                    disabled={isAutoLoading}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                       <polygon points="19 20 9 12 19 4 19 20"></polygon>
@@ -358,6 +404,7 @@ export default function Home() {
                     onClick={handleNext}
                     variant="outline"
                     className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 border-slate-600"
+                    disabled={isAutoLoading}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
                       <polygon points="5 4 15 12 5 20 5 4"></polygon>
