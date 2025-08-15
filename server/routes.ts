@@ -54,7 +54,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         version: "2.0"
       };
 
-      res.json(response);
+      // Use JSON.stringify with proper indentation for pretty printing
+      res.setHeader('Content-Type', 'application/json');
+      res.send(JSON.stringify(response, null, 2));
     } catch (error) {
       console.error("Error fetching random song:", error);
       res.status(500).json({ 
@@ -66,7 +68,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Health check endpoint
   app.get("/health", (req, res) => {
-    res.json({ status: "online", timestamp: new Date().toISOString() });
+    const response = {
+      status: "online",
+      timestamp: new Date().toISOString()
+    };
+    res.setHeader('Content-Type', 'application/json');
+    res.send(JSON.stringify(response, null, 2));
   });
 
   const httpServer = createServer(app);
