@@ -3,17 +3,19 @@
 /**
  * NCS Song Fetcher CLI
  * Command-line interface for fetching and downloading NCS songs
+ * Compatible with Render (Background Worker) and Vercel (Serverless Function)
  */
 
-import { 
+// Import statements modified for CommonJS compatibility
+const { 
     fetchTrendingSongs, 
     searchSongs, 
     getRandomSong, 
     formatSongData, 
     displaySongInfo,
     validateSongUrls 
-} from './utils/ncs.js';
-import { downloadMP3, checkDownloadDirectory } from './utils/download.js';
+} = require('./utils/ncs.js');
+const { downloadMP3, checkDownloadDirectory } = require('./utils/download.js');
 
 /**
  * Main CLI function
@@ -46,9 +48,21 @@ async function main() {
                 break;
                 
             case 'trending':
-            default:
+            case undefined: // No command provided
+            case null:
                 songs = await fetchTrendingSongs();
                 break;
+                
+            case '--help':
+            case '-h':
+                displayHelp();
+                process.exit(0);
+                break;
+                
+            default:
+                console.error(`❌ Unknown command: ${command}`);
+                displayHelp();
+                process.exit(1);
         }
 
         // Select a random song
@@ -64,9 +78,11 @@ async function main() {
         const songData = formatSongData(selectedSong);
         displaySongInfo(songData);
 
-        // Ask user if they want to download the song
-        const shouldDownload = process.env.DOWNLOAD_ENABLED === 'true' || args.includes('--download');
-        
+        // Check if download is requested
+        const shouldDownload = process.env.DOWNLOAD_ENABLED === 'true' || 
+                             args.includes('--download') ||
+                             args.includes('-d');
+
         if (shouldDownload && songData.download_url) {
             await handleDownload(songData);
         } else if (shouldDownload) {
@@ -76,6 +92,11 @@ async function main() {
         }
 
         console.log('\n🎵 CLI execution completed successfully!');
+        
+        // For Render Background Worker - exit cleanly
+        if (process.env.RENDER) {
+            process.exit(0);
+        }
         
     } catch (error) {
         console.error('\n❌ CLI Error:', error.message);
@@ -94,15 +115,16 @@ async function handleDownload(songData) {
             throw new Error('Download directory is not accessible');
         }
 
-        // Generate filename
-        const filename = `${songData.artist} - ${songData.title}.mp3`;
+        // Generate filename (sanitize for filesystem)
+        const sanitize = (str) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const filename = `${sanitize(songData.artist)}_${sanitize(songData.title)}.mp3`;
         
         console.log('⬇️ Starting MP3 download...');
         
         const downloadPath = await downloadMP3(
             songData.download_url, 
             filename, 
-            './downloads'
+            process.env.DOWNLOAD_DIR || './downloads'
         );
         
         console.log(`🎵 Song downloaded successfully!`);
@@ -129,24 +151,12 @@ function displayHelp() {
     console.log('  search <query>     Search for specific songs');
     console.log('');
     console.log('Options:');
-    console.log('  --download         Download the selected song');
-    console.log('  --help            Show this help message');
-    console.log('');
-    console.log('Examples:');
-    console.log('  node cli.js');
-    console.log('  node cli.js trending');
-    console.log('  node cli.js trending --download');
-    console.log('  node cli.js search "electronic music"');
-    console.log('  node cli.js search "alan walker" --download');
+    console.log('  --download (-d)    Download the selected song');
+    console.log('  --help (-h)        Show this help message');
     console.log('');
     console.log('Environment Variables:');
     console.log('  DOWNLOAD_ENABLED=true    Enable automatic downloading');
-}
-
-// Handle help command
-if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    displayHelp();
-    process.exit(0);
+    console.log('  DOWNLOAD_DIR=path       Custom download directory');
 }
 
 // Handle uncaught errors
@@ -161,4 +171,21 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // Run the main function
-main();
+if (require.main === module) {
+    main();
+}
+
+// Export for Vercel Serverless Function compatibility
+module.exports = async (req, res) => {
+    if (req.method === 'POST') {
+        // For Vercel - handle HTTP requests
+        try {
+            await main();
+            res.status(200).send('CLI executed successfully');
+        } catch (error) {
+            res.status(500).send(`Error: ${error.message}`);
+        }
+    } else {
+        res.status(405).send('Method Not Allowed');
+    }
+};
