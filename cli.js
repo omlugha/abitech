@@ -1,107 +1,123 @@
 #!/usr/bin/env node
 
 /**
- * NCS Song Fetcher - Render Optimized Version
- * Works perfectly on Render without port warnings
+ * NCS Song Fetcher - Final Working Version
+ * Guaranteed to work on Render while showing all results
  */
 
 import { 
     fetchTrendingSongs,
     getRandomSong,
     formatSongData,
-    validateSongUrls
+    validateSongUrls,
+    displaySongInfo
 } from './utils/ncs.js';
-import { downloadMP3 } from './utils/download.js';
+import { downloadMP3, checkDownloadDirectory } from './utils/download.js';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Configure paths for ES modules
+// Configure paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuration
 const config = {
     PORT: process.env.PORT || 3000,
-    RENDER: process.env.RENDER ? true : false,
-    DOWNLOAD_ENABLED: process.env.DOWNLOAD_ENABLED === 'true'
+    IS_RENDER: process.env.RENDER ? true : false,
+    DOWNLOAD_ENABLED: process.env.DOWNLOAD_ENABLED === 'true',
+    PAGES_TO_FETCH: parseInt(process.env.PAGES) || 5
 };
 
 /**
- * Core Application Logic
+ * Core Music Fetching Logic
  */
-async function fetchAndProcessSong() {
+async function fetchAndProcess() {
     try {
-        console.log('🔍 Fetching NCS songs...');
-        const songs = await fetchTrendingSongs(5);
-        const song = getRandomSong(songs);
+        // 1. Fetch songs
+        console.log(`📡 Fetching ${config.PAGES_TO_FETCH} pages from NCS...`);
+        const songs = await fetchTrendingSongs(config.PAGES_TO_FETCH);
         
-        if (!validateSongUrls(song)) {
-            throw new Error('Invalid song URLs');
+        // 2. Select random song
+        const selectedSong = getRandomSong(songs);
+        if (!validateSongUrls(selectedSong)) {
+            throw new Error('Selected song has invalid URLs');
         }
-
-        const formatted = formatSongData(song);
-        console.log('🎵 Selected Song:', formatted.title);
-
-        if (config.DOWNLOAD_ENABLED && formatted.download_url) {
-            const filename = `${formatted.artist.replace(/\W+/g, '_')}_${formatted.title.replace(/\W+/g, '_')}.mp3`;
-            const filePath = await downloadMP3(
-                formatted.download_url,
+        
+        // 3. Format and display
+        const songData = formatSongData(selectedSong);
+        displaySongInfo(songData);
+        
+        // 4. Handle download if enabled
+        if (config.DOWNLOAD_ENABLED && songData.download_url) {
+            console.log('⬇️ Starting download...');
+            const filename = `${songData.artist.replace(/[^\w]/g, '_')}-${songData.title.replace(/[^\w]/g, '_')}.mp3`;
+            const downloadPath = await downloadMP3(
+                songData.download_url,
                 filename,
                 './downloads'
             );
-            console.log('💾 Saved to:', filePath);
+            console.log(`✅ Downloaded to: ${downloadPath}`);
         }
-
-        return formatted;
+        
+        return songData;
     } catch (error) {
-        console.error('❌ Error:', error.message);
+        console.error('❌ Processing error:', error.message);
         throw error;
     }
 }
 
 /**
- * Minimal Web Server for Render Compatibility
+ * Minimal Web Server for Render
  */
-function startHealthCheckServer() {
+function setupWebServer() {
     const app = express();
     
-    // Health check endpoint
-    app.get('/health', (req, res) => {
-        res.status(200).json({
-            status: 'healthy',
-            service: 'ncs-fetcher',
-            timestamp: new Date().toISOString()
-        });
-    });
-
-    // Serve basic HTML if present
+    // Serve static files (including HTML)
     app.use(express.static(__dirname));
-
+    
+    // API endpoint
+    app.get('/api/song', async (req, res) => {
+        try {
+            const song = await fetchAndProcess();
+            res.json(song);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+    
+    // Health check
+    app.get('/health', (req, res) => {
+        res.status(200).send('OK');
+    });
+    
     return app.listen(config.PORT, () => {
-        console.log(`🖥️  Health check server running on port ${config.PORT}`);
+        console.log(`🌍 Web server ready on port ${config.PORT}`);
     });
 }
 
 /**
- * Main Execution Flow
+ * Main Execution
  */
 async function main() {
-    // Start minimal web server if on Render
-    let server;
-    if (config.RENDER) {
-        server = startHealthCheckServer();
-    }
-
     try {
-        // Run main application logic
-        await fetchAndProcessSong();
-        console.log('✅ Operation completed successfully');
-
-        // Keep alive if on Render
-        if (config.RENDER) {
-            console.log('🌐 Process maintained for Render');
-            setInterval(() => {}, 1000 * 60 * 5); // 5 minute keep-alive
+        if (config.IS_RENDER) {
+            // Render-compatible mode
+            const server = setupWebServer();
+            
+            // Initial run
+            console.log('🚀 Starting NCS Fetcher on Render...');
+            await fetchAndProcess();
+            
+            // Schedule periodic runs (every 30 minutes)
+            setInterval(async () => {
+                await fetchAndProcess();
+            }, 30 * 60 * 1000);
+            
+        } else {
+            // Standard CLI mode
+            await fetchAndProcess();
+            process.exit(0);
         }
     } catch (error) {
         console.error('💥 Application failed:', error.message);
@@ -112,13 +128,12 @@ async function main() {
 // Start the application
 main();
 
-// Cleanup handlers
-process.on('SIGTERM', () => {
-    console.log('🛑 Received SIGTERM - shutting down gracefully');
-    process.exit(0);
-});
-
+// Error handling
 process.on('uncaughtException', (err) => {
     console.error('💥 Uncaught Exception:', err.message);
     process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('⚠️ Unhandled Rejection:', reason);
 });
