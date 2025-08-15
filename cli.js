@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * NCS Song Fetcher CLI
- * Command-line interface for fetching and downloading NCS songs
- * Compatible with Render (Background Worker) and Vercel (Serverless Function)
- * ES Modules (import/export) version
+ * NCS Song Fetcher CLI - Render/Background Worker Version
+ * This is optimized for Render's Background Worker service type
  */
 
 import { 
@@ -17,175 +15,150 @@ import {
 } from './utils/ncs.js';
 import { downloadMP3, checkDownloadDirectory } from './utils/download.js';
 
+// Configuration
+const DEFAULT_PAGES_TO_FETCH = 5;
+
 /**
  * Display help information
  */
 function displayHelp() {
     console.log('🎵 NCS Song Fetcher CLI');
     console.log('========================');
-    console.log('');
-    console.log('Usage:');
+    console.log('\nUsage:');
     console.log('  node cli.js [command] [options]');
-    console.log('');
-    console.log('Commands:');
+    console.log('\nCommands:');
     console.log('  trending           Fetch trending NCS songs (default)');
     console.log('  search <query>     Search for specific songs');
-    console.log('');
-    console.log('Options:');
+    console.log('\nOptions:');
     console.log('  --download (-d)    Download the selected song');
+    console.log('  --pages <number>   Number of pages to fetch (default: 5)');
     console.log('  --help (-h)        Show this help message');
-    console.log('');
-    console.log('Environment Variables:');
+    console.log('\nEnvironment Variables:');
     console.log('  DOWNLOAD_ENABLED=true    Enable automatic downloading');
     console.log('  DOWNLOAD_DIR=path       Custom download directory');
 }
 
 /**
  * Handle MP3 file download
- * @param {Object} songData - Formatted song data
  */
 async function handleDownload(songData) {
     try {
-        // Check if download directory is writable
         if (!checkDownloadDirectory()) {
-            throw new Error('Download directory is not accessible');
+            throw new Error('Download directory not accessible');
         }
 
-        // Generate filename (sanitize for filesystem)
         const sanitize = (str) => str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         const filename = `${sanitize(songData.artist)}_${sanitize(songData.title)}.mp3`;
         
-        console.log('⬇️ Starting MP3 download...');
-        
+        console.log('⬇️ Starting download...');
         const downloadPath = await downloadMP3(
             songData.download_url, 
             filename, 
             process.env.DOWNLOAD_DIR || './downloads'
         );
         
-        console.log(`🎵 Song downloaded successfully!`);
-        console.log(`📂 Location: ${downloadPath}`);
-        
+        console.log(`✅ Downloaded: ${downloadPath}`);
     } catch (error) {
         console.error('❌ Download failed:', error.message);
-        console.log('🔗 You can still use the stream URL to listen online');
     }
 }
 
 /**
- * Main CLI function
+ * Parse command line arguments
  */
-async function main() {
-    try {
-        console.log('🎵 NCS Song Fetcher CLI');
-        console.log('========================\n');
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const result = {
+        command: 'trending',
+        query: '',
+        download: false,
+        pages: DEFAULT_PAGES_TO_FETCH
+    };
 
-        // Parse command line arguments
-        const args = process.argv.slice(2);
-        const command = args[0];
-        const query = args.slice(1).join(' ');
-
-        let songs = [];
-
-        // Handle different commands
-        switch (command) {
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        switch (arg) {
             case 'search':
-                if (!query) {
-                    console.error('❌ Please provide a search query');
-                    console.log('Usage: node cli.js search <query>');
-                    process.exit(1);
-                }
-                songs = await searchSongs(query);
-                if (songs.length === 0) {
-                    console.log('🔍 No songs found for your search query');
-                    process.exit(0);
-                }
-                break;
-                
+                result.command = 'search';
+                result.query = args.slice(i + 1).join(' ');
+                return result;
             case 'trending':
-            case undefined: // No command provided
-            case null:
-                songs = await fetchTrendingSongs();
+                result.command = 'trending';
                 break;
-                
+            case '--download':
+            case '-d':
+                result.download = true;
+                break;
+            case '--pages':
+                result.pages = parseInt(args[i + 1]) || DEFAULT_PAGES_TO_FETCH;
+                i++;
+                break;
             case '--help':
             case '-h':
                 displayHelp();
                 process.exit(0);
-                break;
-                
-            default:
-                console.error(`❌ Unknown command: ${command}`);
-                displayHelp();
-                process.exit(1);
+        }
+    }
+    return result;
+}
+
+/**
+ * Main execution function
+ */
+async function run() {
+    try {
+        console.log('🚀 Starting NCS Song Fetcher');
+        const { command, query, download, pages } = parseArgs();
+
+        // Fetch songs based on command
+        const songs = command === 'search' 
+            ? await searchSongs(query) 
+            : await fetchTrendingSongs(pages);
+
+        if (!songs.length) {
+            console.log('🔍 No songs found');
+            return;
         }
 
-        // Select a random song
+        // Select and display song
         const selectedSong = getRandomSong(songs);
-        
-        // Validate song has URLs
         if (!validateSongUrls(selectedSong)) {
-            console.error('❌ Selected song has no valid URLs');
-            process.exit(1);
+            throw new Error('Selected song has no valid URLs');
         }
 
-        // Format and display song information
         const songData = formatSongData(selectedSong);
         displaySongInfo(songData);
 
-        // Check if download is requested
-        const shouldDownload = process.env.DOWNLOAD_ENABLED === 'true' || 
-                             args.includes('--download') ||
-                             args.includes('-d');
-
+        // Handle download if requested
+        const shouldDownload = download || process.env.DOWNLOAD_ENABLED === 'true';
         if (shouldDownload && songData.download_url) {
             await handleDownload(songData);
-        } else if (shouldDownload) {
-            console.log('⚠️ Download requested but no download URL available');
-        } else {
-            console.log('💡 Tip: Add --download flag or set DOWNLOAD_ENABLED=true to download the song');
         }
 
-        console.log('\n🎵 CLI execution completed successfully!');
-        
-        // For Render Background Worker - exit cleanly
-        if (process.env.RENDER) {
-            process.exit(0);
-        }
-        
+        console.log('\n🎉 Operation completed successfully');
+
     } catch (error) {
-        console.error('\n❌ CLI Error:', error.message);
-        process.exit(1);
-    }
-}
-
-// Handle uncaught errors
-process.on('uncaughtException', (error) => {
-    console.error('\n💥 Uncaught Exception:', error.message);
-    process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('\n💥 Unhandled Rejection at:', promise, 'reason:', reason);
-    process.exit(1);
-});
-
-// Run the main function
-if (import.meta.url === `file://${process.argv[1]}`) {
-    main();
-}
-
-// Export for Vercel Serverless Function compatibility
-export default async (req, res) => {
-    if (req.method === 'POST') {
-        // For Vercel - handle HTTP requests
-        try {
-            await main();
-            res.status(200).send('CLI executed successfully');
-        } catch (error) {
-            res.status(500).send(`Error: ${error.message}`);
+        console.error('\n❌ Error:', error.message);
+        process.exitCode = 1;
+    } finally {
+        // Proper cleanup for Render
+        if (process.env.RENDER) {
+            console.log('🛑 Render Background Worker shutting down');
+            process.exit(process.exitCode || 0);
         }
-    } else {
-        res.status(405).send('Method Not Allowed');
     }
-};
+}
+
+// Error handlers
+process.on('uncaughtException', (error) => {
+    console.error('💥 Uncaught Exception:', error.message);
+    process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.error('💥 Unhandled Rejection:', reason);
+    process.exit(1);
+});
+
+// Start the application
+run();
