@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A complete Node.js application that fetches trending NCS (NoCopyrightSounds) songs and provides both CLI and API interfaces.",
   "main": "cli.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
