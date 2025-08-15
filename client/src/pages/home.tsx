@@ -308,7 +308,7 @@ export default function Home() {
 
         {/* Footer */}
         <footer className="text-center mt-8 text-slate-500 text-sm">
-          <p>Made by Ibrahim Adams • Compatible with Render & Vercel</p>
+          <p>Made by Ibrahim Adams • Compatible with Bwm xmd</p>
         </footer>
       </div>
     </div>
