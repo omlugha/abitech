@@ -49,6 +49,7 @@ export default function Home() {
     refetchOnMount: true,
     retry: 3,
     retryDelay: 1000,
+    enabled: true,
   });
 
   const song = response?.data;
@@ -80,12 +81,14 @@ export default function Home() {
 
     const playNewSong = async () => {
       try {
+        console.log("Loading new song:", song.title);
         // Set the new audio source
         audio.src = song.links.stream;
         audio.load();
         
         // Always try to auto-play the new song if auto-play is active
         if (autoPlayActive) {
+          console.log("Auto-playing new song");
           await audio.play();
         }
       } catch (error) {
@@ -102,15 +105,24 @@ export default function Home() {
     playNewSong();
   }, [song?.id, autoPlayActive, isLoading]);
 
-  // Simple auto-load next song function
+  // Enhanced auto-load next song function
   const autoLoadNextSong = () => {
-    if (!autoPlayActive) return;
+    if (!autoPlayActive) {
+      console.log("Auto-play not active, skipping auto-load");
+      return;
+    }
     
-    console.log("Auto-loading next song");
+    console.log("Song ended - loading next song automatically");
     setIsPlaying(false);
     
-    // Simple increment to trigger new song fetch
-    setRefreshKey(prev => prev + 1);
+    // Force increment to trigger new song fetch
+    const newKey = Date.now(); // Use timestamp to ensure uniqueness
+    setRefreshKey(newKey);
+    
+    // Also trigger refetch manually to ensure it happens
+    setTimeout(() => {
+      refetch();
+    }, 100);
   };
 
   // Audio event listeners for continuous auto-play
@@ -119,21 +131,25 @@ export default function Home() {
     if (!audio) return;
 
     const handlePlay = () => {
+      console.log("Audio started playing");
       setIsPlaying(true);
       setAutoPlayActive(true);
     };
 
     const handlePause = () => {
+      console.log("Audio paused");
       setIsPlaying(false);
     };
 
     const handleEnded = () => {
-      console.log("Song ended - auto-loading next song");
+      console.log("🎵 Song ended naturally - auto-loading next song");
+      // Ensure auto-load happens
       autoLoadNextSong();
     };
 
     const handleCanPlayThrough = () => {
       if (autoPlayActive && audio.paused) {
+        console.log("Can play through - starting playback");
         audio.play().catch(e => {
           console.error("Auto-play on canplaythrough failed:", e);
         });
@@ -142,21 +158,24 @@ export default function Home() {
 
     const handleLoadedData = () => {
       if (autoPlayActive && audio.paused) {
+        console.log("Data loaded - starting playback");
         audio.play().catch(e => {
           console.error("Auto-play on loadeddata failed:", e);
         });
       }
     };
 
-    const handleError = () => {
-      console.error("Audio error - trying next song");
+    const handleError = (e) => {
+      console.error("Audio error:", e);
       if (autoPlayActive) {
+        console.log("Audio error - trying next song");
         setTimeout(() => {
           autoLoadNextSong();
         }, 1000);
       }
     };
 
+    // Add all event listeners
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('ended', handleEnded);
@@ -165,6 +184,7 @@ export default function Home() {
     audio.addEventListener('error', handleError);
 
     return () => {
+      // Remove all event listeners
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('ended', handleEnded);
@@ -179,6 +199,7 @@ export default function Home() {
     const handleVisibilityChange = () => {
       if (!document.hidden && autoPlayActive && audioRef.current && song?.links?.stream) {
         if (audioRef.current.paused) {
+          console.log("Page visible - resuming playback");
           audioRef.current.play().catch(e => {
             console.error("Auto-play on visibility change failed:", e);
           });
@@ -192,13 +213,19 @@ export default function Home() {
 
   // Simplified next/previous handlers
   const handleNext = () => {
+    console.log("Next button clicked");
     setAutoPlayActive(true);
-    setRefreshKey(prev => prev + 1);
+    const newKey = Date.now();
+    setRefreshKey(newKey);
+    setTimeout(() => refetch(), 100);
   };
 
   const handlePrevious = () => {
+    console.log("Previous button clicked");
     setAutoPlayActive(true);
-    setRefreshKey(prev => prev + 1);
+    const newKey = Date.now();
+    setRefreshKey(newKey);
+    setTimeout(() => refetch(), 100);
   };
 
   const handleDownload = () => {
@@ -215,8 +242,11 @@ export default function Home() {
   };
 
   const handleRefresh = () => {
+    console.log("Refresh button clicked");
     setAutoPlayActive(true);
-    setRefreshKey(prev => prev + 1);
+    const newKey = Date.now();
+    setRefreshKey(newKey);
+    setTimeout(() => refetch(), 100);
   };
 
   const copyToClipboard = async (text: string, type: 'url' | 'json') => {
