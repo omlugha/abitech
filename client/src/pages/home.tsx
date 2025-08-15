@@ -236,75 +236,75 @@ export default function Home() {
         </div>
 
         {/* API Documentation */}
-        <Card className="glass border-slate-700 w-full max-w-lg mx-auto mt-8">
-          <CardContent className="p-6">
-            <h3 className="font-bold text-lg mb-4 gradient-text">API Endpoint</h3>
-            
-            {/* Clickable Endpoint URL */}
-            <div className="bg-slate-800 rounded-lg p-4 mb-4 relative group">
-              <div 
-                className="flex items-center justify-between cursor-pointer"
-                onClick={toggleJsonResponse}
-                data-testid="endpoint-url"
-              >
-                <code className="text-cyan-400 text-sm break-all flex-1">
-                  GET {endpointUrl}
-                </code>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="ml-2 p-1 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    copyToClipboard(endpointUrl, 'url');
-                  }}
-                  data-testid="button-copy-url"
-                >
-                  {copiedUrl ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-                </Button>
-              </div>
-            </div>
-            
-            <p className="text-slate-400 text-sm mb-4">
-              Click the endpoint URL above to see live JSON response. Returns a random NCS song.
-            </p>
+<Card className="glass border-slate-700 w-full max-w-lg mx-auto mt-8">
+  <CardContent className="p-6">
+    <h3 className="font-bold text-lg mb-4 gradient-text">API Endpoint</h3>
+    
+    {/* Action Buttons */}
+    <div className="flex gap-3">
+      <Button
+        variant="outline"
+        className="flex-1"
+        onClick={() => copyToClipboard(endpointUrl, 'url')}
+        data-testid="button-copy-url"
+      >
+        {copiedUrl ? (
+          <>
+            <Check className="h-4 w-4 mr-2" />
+            <span>Copied!</span>
+          </>
+        ) : (
+          <>
+            <Copy className="h-4 w-4 mr-2" />
+            <span>Copy Endpoint</span>
+          </>
+        )}
+      </Button>
+      
+      <Button
+        variant="outline"
+        className="flex-1"
+        onClick={toggleJsonResponse}
+        data-testid="button-test-endpoint"
+      >
+        {showJsonResponse ? (
+          <>
+            <Check className="h-4 w-4 mr-2" />
+            <span>Response Shown</span>
+          </>
+        ) : (
+          <>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            <span>Test Endpoint</span>
+          </>
+        )}
+      </Button>
+    </div>
 
-            {/* Live JSON Response */}
-            {showJsonResponse && response && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold text-slate-300">Live JSON Response:</h4>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="p-1 h-8 w-8"
-                    onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
-                    data-testid="button-copy-json"
-                  >
-                    {copiedJson ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-                  </Button>
-                </div>
-                <pre className="bg-slate-800 rounded-lg p-3 text-xs text-slate-300 overflow-x-auto border border-slate-600">
-                  <code data-testid="json-response">
+    {/* Live JSON Response */}
+    {showJsonResponse && response && (
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold text-slate-300">API Response:</h4>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="p-1 h-8 w-8"
+            onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
+            data-testid="button-copy-json"
+          >
+            {copiedJson ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+          </Button>
+        </div>
+        <pre className="bg-slate-800 rounded-lg p-3 text-xs text-slate-300 overflow-x-auto border border-slate-600">
+          <code data-testid="json-response">
 {JSON.stringify(response, null, 2)}
-                  </code>
-                </pre>
-              </div>
-            )}
-            
-            <details className="text-sm">
-              <summary className="cursor-pointer text-slate-300 hover:text-white mb-2">Sample JSON Response</summary>
-              <pre className="bg-slate-800 rounded-lg p-3 text-xs text-slate-300 overflow-x-auto">
-                <code>{`{
-  "title": "Elektronomia - Sky High",
-  "streamUrl": "https://example.com/stream/sky-high.mp3",
-  "downloadUrl": "https://example.com/download/sky-high.mp3",
-  "thumbnailUrl": "https://example.com/thumb/sky-high.jpg"
-}`}</code>
-              </pre>
-            </details>
-          </CardContent>
-        </Card>
+          </code>
+        </pre>
+      </div>
+    )}
+  </CardContent>
+</Card>
 
         {/* Footer */}
         <footer className="text-center mt-8 text-slate-500 text-sm">
