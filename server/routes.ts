@@ -37,8 +37,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           artist: artist,
           track: trackName,
           links: {
-            stream: randomSong.streamUrl,
-            download: randomSong.downloadUrl,
+            Bwm_stream_link: randomSong.streamUrl,
+            Bwm_download_link: randomSong.downloadUrl,
             thumbnail: randomSong.thumbnailUrl
           },
           metadata: {
