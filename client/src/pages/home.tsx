@@ -443,13 +443,13 @@ export default function Home() {
           </a>
         </div>
 
-        {/* API Documentation */}
+            {/* API Documentation */}
         <Card className="glass border-slate-700 w-full max-w-lg mx-auto mt-8">
           <CardContent className="p-6">
             <h3 className="font-bold text-lg mb-4 gradient-text">API Endpoint</h3>
             
             {/* Action Buttons */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 mb-4">
               <Button
                 variant="outline"
                 className="flex-1"
@@ -472,48 +472,43 @@ export default function Home() {
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
-                data-testid="button-copy-json"
+                onClick={toggleJsonResponse}
+                data-testid="button-test-endpoint"
               >
-                {copiedJson ? (
-                  <>
-                    <Check className="h-4 w-4 mr-2" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-4 w-4 mr-2" />
-                    <span>Copy JSON</span>
-                  </>
-                )}
+                <RefreshCw className="h-4 w-4 mr-2" />
+                <span>Test Endpoint</span>
               </Button>
             </div>
 
-            {/* Endpoint URL Display */}
-            <div className="mt-4 p-3 bg-slate-800 rounded-lg">
-              <code className="text-sm text-slate-300 break-all">{endpointUrl}</code>
-            </div>
-
-            {/* JSON Response Toggle */}
-            <Button
-              variant="ghost"
-              className="w-full mt-4"
-              onClick={toggleJsonResponse}
-              data-testid="button-toggle-json"
-            >
-              {showJsonResponse ? 'Hide' : 'Show'} JSON Response
-            </Button>
-
-            {/* JSON Response Display */}
+            {/* Live JSON Response */}
             {showJsonResponse && response && (
-              <div className="mt-4 p-3 bg-slate-800 rounded-lg max-h-96 overflow-auto">
-                <pre className="text-xs text-slate-300">
-                  <code>{JSON.stringify(response, null, 2)}</code>
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-slate-300">API Response:</h4>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="p-1 h-8 w-8"
+                    onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
+                    data-testid="button-copy-json"
+                  >
+                    {copiedJson ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+                <pre className="bg-slate-800 rounded-lg p-3 text-xs text-slate-300 overflow-x-auto border border-slate-600">
+                  <code data-testid="json-response">
+{JSON.stringify(response, null, 2)}
+                  </code>
                 </pre>
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Footer */}
+        <footer className="text-center mt-8 text-slate-500 text-sm">
+          <p>Made by Ibrahim Adams • Compatible with Bwm xmd tech</p>
+        </footer>
       </div>
     </div>
   );
