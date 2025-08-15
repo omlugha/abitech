@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 
 /**
- * NCS Song Fetcher - Universal Version
- * Works as both CLI and web server with HTML interface
+ * NCS Song Fetcher - Render Optimized Version
+ * Works perfectly on Render without port warnings
  */
 
 import { 
-    fetchTrendingSongs, 
-    searchSongs, 
-    getRandomSong, 
-    formatSongData, 
-    validateSongUrls 
+    fetchTrendingSongs,
+    getRandomSong,
+    formatSongData,
+    validateSongUrls
 } from './utils/ncs.js';
-import { downloadMP3, checkDownloadDirectory } from './utils/download.js';
+import { downloadMP3 } from './utils/download.js';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -24,130 +23,102 @@ const __dirname = path.dirname(__filename);
 // Configuration
 const config = {
     PORT: process.env.PORT || 3000,
-    WEB_MODE: process.env.WEB_MODE === 'true',
-    DOWNLOAD_ENABLED: process.env.DOWNLOAD_ENABLED === 'true',
-    DOWNLOAD_DIR: process.env.DOWNLOAD_DIR || './downloads',
-    KEEP_ALIVE: process.env.RENDER ? true : false
+    RENDER: process.env.RENDER ? true : false,
+    DOWNLOAD_ENABLED: process.env.DOWNLOAD_ENABLED === 'true'
 };
 
 /**
- * Core Song Fetching Logic
+ * Core Application Logic
  */
-async function getRandomNcsSong(options = {}) {
-    const { pages = 5, query = '' } = options;
-    
-    const songs = query 
-        ? await searchSongs(query)
-        : await fetchTrendingSongs(pages);
-
-    if (!songs.length) throw new Error('No songs found');
-    
-    const song = getRandomSong(songs);
-    if (!validateSongUrls(song)) throw new Error('Invalid song URLs');
-    
-    return formatSongData(song);
-}
-
-/**
- * CLI-Specific Functions
- */
-async function runCliMode() {
+async function fetchAndProcessSong() {
     try {
-        console.log('🎵 NCS Song Fetcher - CLI Mode');
+        console.log('🔍 Fetching NCS songs...');
+        const songs = await fetchTrendingSongs(5);
+        const song = getRandomSong(songs);
         
-        const song = await getRandomNcsSong({ pages: 5 });
-        console.log('\n⭐ Selected Song:');
-        console.log(`Title: ${song.title}`);
-        console.log(`Artist: ${song.artist}`);
-        console.log(`Stream: ${song.stream_url}`);
-        
-        if (config.DOWNLOAD_ENABLED && song.download_url) {
-            console.log('\n⬇️ Starting download...');
-            const filename = `${song.artist.replace(/[^\w]/g, '_')}_${song.title.replace(/[^\w]/g, '_')}.mp3`;
-            const filePath = await downloadMP3(
-                song.download_url,
-                filename,
-                config.DOWNLOAD_DIR
-            );
-            console.log(`✅ Saved to: ${filePath}`);
+        if (!validateSongUrls(song)) {
+            throw new Error('Invalid song URLs');
         }
 
-        console.log('\n🎉 Operation completed');
-        
-        // Keep alive if running on Render in CLI mode
-        if (config.KEEP_ALIVE) {
-            console.log('🌐 Process kept alive for Render');
-            setInterval(() => {}, 1000);
+        const formatted = formatSongData(song);
+        console.log('🎵 Selected Song:', formatted.title);
+
+        if (config.DOWNLOAD_ENABLED && formatted.download_url) {
+            const filename = `${formatted.artist.replace(/\W+/g, '_')}_${formatted.title.replace(/\W+/g, '_')}.mp3`;
+            const filePath = await downloadMP3(
+                formatted.download_url,
+                filename,
+                './downloads'
+            );
+            console.log('💾 Saved to:', filePath);
         }
+
+        return formatted;
     } catch (error) {
         console.error('❌ Error:', error.message);
-        process.exit(1);
+        throw error;
     }
 }
 
 /**
- * Web Server Setup
+ * Minimal Web Server for Render Compatibility
  */
-function setupWebServer() {
+function startHealthCheckServer() {
     const app = express();
     
-    // Serve static files (including your HTML)
+    // Health check endpoint
+    app.get('/health', (req, res) => {
+        res.status(200).json({
+            status: 'healthy',
+            service: 'ncs-fetcher',
+            timestamp: new Date().toISOString()
+        });
+    });
+
+    // Serve basic HTML if present
     app.use(express.static(__dirname));
-    
-    // API Endpoints
-    app.get('/api/song', async (req, res) => {
-        try {
-            const song = await getRandomNcsSong();
-            res.json(song);
-        } catch (error) {
-            res.status(500).json({ error: error.message });
-        }
+
+    return app.listen(config.PORT, () => {
+        console.log(`🖥️  Health check server running on port ${config.PORT}`);
     });
-    
-    app.get('/api/download', async (req, res) => {
-        try {
-            const song = await getRandomNcsSong();
-            const filename = `${song.artist.replace(/[^\w]/g, '_')}_${song.title.replace(/[^\w]/g, '_')}.mp3`;
-            const filePath = await downloadMP3(
-                song.download_url,
-                filename,
-                config.DOWNLOAD_DIR
-            );
-            res.download(filePath);
-        } catch (error) {
-            res.status(500).json({ error: error.message });
-        }
-    });
-    
-    // All other routes serve the HTML file
-    app.get('*', (req, res) => {
-        res.sendFile(path.join(__dirname, 'index.html'));
-    });
-    
-    return app;
 }
 
 /**
- * Start the appropriate mode
+ * Main Execution Flow
  */
-if (config.WEB_MODE) {
-    // Web Server Mode
-    const app = setupWebServer();
-    app.listen(config.PORT, () => {
-        console.log(`🌍 Web server running on port ${config.PORT}`);
-        console.log(`➡️ Access the interface at http://localhost:${config.PORT}`);
-    });
-} else {
-    // CLI Mode
-    runCliMode();
+async function main() {
+    // Start minimal web server if on Render
+    let server;
+    if (config.RENDER) {
+        server = startHealthCheckServer();
+    }
+
+    try {
+        // Run main application logic
+        await fetchAndProcessSong();
+        console.log('✅ Operation completed successfully');
+
+        // Keep alive if on Render
+        if (config.RENDER) {
+            console.log('🌐 Process maintained for Render');
+            setInterval(() => {}, 1000 * 60 * 5); // 5 minute keep-alive
+        }
+    } catch (error) {
+        console.error('💥 Application failed:', error.message);
+        process.exit(1);
+    }
 }
 
-// Error Handling
+// Start the application
+main();
+
+// Cleanup handlers
+process.on('SIGTERM', () => {
+    console.log('🛑 Received SIGTERM - shutting down gracefully');
+    process.exit(0);
+});
+
 process.on('uncaughtException', (err) => {
     console.error('💥 Uncaught Exception:', err.message);
     process.exit(1);
-});
-
-process.on('unhandledRejection', (reason) => {
-    console.error('⚠️ Unhandled Rejection:', reason);
 });
