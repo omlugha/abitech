@@ -35,8 +35,8 @@ export default function Home() {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [shouldAutoPlay, setShouldAutoPlay] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
 
@@ -74,7 +74,7 @@ export default function Home() {
   // Handle page visibility change for auto-play when returning
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && shouldAutoPlay && hasUserInteracted && audioRef.current && song?.links?.stream) {
+      if (!document.hidden && autoPlayEnabled && hasUserInteracted && audioRef.current && song?.links?.stream) {
         audioRef.current.play().catch(e => {
           console.error("Auto-play on visibility change failed:", e);
         });
@@ -83,7 +83,7 @@ export default function Home() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [shouldAutoPlay, hasUserInteracted, song]);
+  }, [autoPlayEnabled, hasUserInteracted, song]);
 
   // Auto-play new songs when they load
   useEffect(() => {
@@ -92,42 +92,53 @@ export default function Home() {
 
     // Update audio source
     audio.src = song.links.stream;
+    audio.load();
     
-    // Auto-start playing if user has interacted or if we should auto-play
-    if (hasUserInteracted || shouldAutoPlay) {
-      audio.load();
+    // Auto-start playing if auto-play is enabled
+    if (autoPlayEnabled && hasUserInteracted) {
       const playPromise = audio.play();
       
       if (playPromise !== undefined) {
         playPromise
           .then(() => {
-            setShouldAutoPlay(true);
+            // Audio started successfully
           })
           .catch(e => {
             console.error("Auto-play failed:", e);
-            // If auto-play fails, we'll still show the play button
             setIsPlaying(false);
           });
       }
     }
-  }, [song?.links?.stream, hasUserInteracted, shouldAutoPlay]);
+  }, [song?.links?.stream, autoPlayEnabled, hasUserInteracted]);
 
-  // Audio event listeners
+  // Audio event listeners - only for actual audio state, not for UI updates
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     const handleEnded = () => {
       setIsPlaying(false);
+      // Auto-next to continue playing all songs
       handleNext();
     };
 
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
-    const handleLoadStart = () => setIsPlaying(false);
+    const handlePlay = () => {
+      // Only update if we're not already showing playing state
+      if (!isPlaying) {
+        setIsPlaying(true);
+      }
+    };
+
+    const handlePause = () => {
+      // Only update if we're not already showing paused state
+      if (isPlaying) {
+        setIsPlaying(false);
+      }
+    };
+
     const handleCanPlay = () => {
-      // Auto-play when can play if we should auto-play
-      if (shouldAutoPlay && hasUserInteracted) {
+      // Auto-play when can play if auto-play is enabled
+      if (autoPlayEnabled && hasUserInteracted && audio.paused) {
         audio.play().catch(e => {
           console.error("Auto-play on canplay failed:", e);
         });
@@ -137,27 +148,28 @@ export default function Home() {
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
-    audio.addEventListener('loadstart', handleLoadStart);
     audio.addEventListener('canplay', handleCanPlay);
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
-      audio.removeEventListener('loadstart', handleLoadStart);
       audio.removeEventListener('canplay', handleCanPlay);
     };
-  }, [shouldAutoPlay, hasUserInteracted]);
+  }, [autoPlayEnabled, hasUserInteracted, isPlaying]);
 
   const handleStream = () => {
     if (audioRef.current && song?.links?.stream) {
       setHasUserInteracted(true);
       
       if (audioRef.current.paused) {
-        audioRef.current.play().then(() => {
-          setShouldAutoPlay(true);
-        }).catch(e => {
+        // Immediately update UI to show pause button
+        setIsPlaying(true);
+        setAutoPlayEnabled(true); // Enable auto-play for all future songs
+        
+        audioRef.current.play().catch(e => {
           console.error("Playback failed:", e);
+          setIsPlaying(false); // Revert if play fails
           toast({
             title: "Playback error",
             description: "Failed to start playback",
@@ -165,6 +177,8 @@ export default function Home() {
           });
         });
       } else {
+        // Immediately update UI to show play button
+        setIsPlaying(false);
         audioRef.current.pause();
       }
     }
@@ -173,15 +187,19 @@ export default function Home() {
   const handleNext = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
-    // Keep auto-play enabled for next song
-    setShouldAutoPlay(hasUserInteracted);
+    // Keep auto-play enabled permanently once user has interacted
+    if (hasUserInteracted) {
+      setAutoPlayEnabled(true);
+    }
   };
 
   const handlePrevious = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
-    // Keep auto-play enabled for previous song
-    setShouldAutoPlay(hasUserInteracted);
+    // Keep auto-play enabled permanently once user has interacted
+    if (hasUserInteracted) {
+      setAutoPlayEnabled(true);
+    }
   };
 
   const handleDownload = () => {
