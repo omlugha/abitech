@@ -35,6 +35,8 @@ export default function Home() {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [shouldAutoPlay, setShouldAutoPlay] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
 
@@ -52,6 +54,65 @@ export default function Home() {
 
   const song = response?.data;
 
+  // Handle user interaction for auto-play policy
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      setHasUserInteracted(true);
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+
+    document.addEventListener('click', handleUserInteraction);
+    document.addEventListener('keydown', handleUserInteraction);
+
+    return () => {
+      document.removeEventListener('click', handleUserInteraction);
+      document.removeEventListener('keydown', handleUserInteraction);
+    };
+  }, []);
+
+  // Handle page visibility change for auto-play when returning
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && shouldAutoPlay && hasUserInteracted && audioRef.current && song?.links?.stream) {
+        audioRef.current.play().catch(e => {
+          console.error("Auto-play on visibility change failed:", e);
+        });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [shouldAutoPlay, hasUserInteracted, song]);
+
+  // Auto-play new songs when they load
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !song?.links?.stream) return;
+
+    // Update audio source
+    audio.src = song.links.stream;
+    
+    // Auto-start playing if user has interacted or if we should auto-play
+    if (hasUserInteracted || shouldAutoPlay) {
+      audio.load();
+      const playPromise = audio.play();
+      
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setShouldAutoPlay(true);
+          })
+          .catch(e => {
+            console.error("Auto-play failed:", e);
+            // If auto-play fails, we'll still show the play button
+            setIsPlaying(false);
+          });
+      }
+    }
+  }, [song?.links?.stream, hasUserInteracted, shouldAutoPlay]);
+
+  // Audio event listeners
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -63,22 +124,39 @@ export default function Home() {
 
     const handlePlay = () => setIsPlaying(true);
     const handlePause = () => setIsPlaying(false);
+    const handleLoadStart = () => setIsPlaying(false);
+    const handleCanPlay = () => {
+      // Auto-play when can play if we should auto-play
+      if (shouldAutoPlay && hasUserInteracted) {
+        audio.play().catch(e => {
+          console.error("Auto-play on canplay failed:", e);
+        });
+      }
+    };
 
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
+    audio.addEventListener('loadstart', handleLoadStart);
+    audio.addEventListener('canplay', handleCanPlay);
 
     return () => {
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('loadstart', handleLoadStart);
+      audio.removeEventListener('canplay', handleCanPlay);
     };
-  }, [song]);
+  }, [shouldAutoPlay, hasUserInteracted]);
 
   const handleStream = () => {
     if (audioRef.current && song?.links?.stream) {
+      setHasUserInteracted(true);
+      
       if (audioRef.current.paused) {
-        audioRef.current.play().catch(e => {
+        audioRef.current.play().then(() => {
+          setShouldAutoPlay(true);
+        }).catch(e => {
           console.error("Playback failed:", e);
           toast({
             title: "Playback error",
@@ -95,11 +173,15 @@ export default function Home() {
   const handleNext = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
+    // Keep auto-play enabled for next song
+    setShouldAutoPlay(hasUserInteracted);
   };
 
   const handlePrevious = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
+    // Keep auto-play enabled for previous song
+    setShouldAutoPlay(hasUserInteracted);
   };
 
   const handleDownload = () => {
@@ -150,6 +232,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 font-inter text-slate-100 overflow-x-hidden relative">
       <AnimatedBackground />
+      
+      {/* Hidden audio element with preload */}
+      <audio 
+        ref={audioRef} 
+        preload="auto"
+        style={{ display: 'none' }}
+      />
       
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
         {/* Header Section */}
@@ -339,52 +428,48 @@ export default function Home() {
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={toggleJsonResponse}
-                data-testid="button-test-endpoint"
+                onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
+                data-testid="button-copy-json"
               >
-                {showJsonResponse ? (
+                {copiedJson ? (
                   <>
                     <Check className="h-4 w-4 mr-2" />
-                    <span>Response Shown</span>
+                    <span>Copied!</span>
                   </>
                 ) : (
                   <>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    <span>Test Endpoint</span>
+                    <Copy className="h-4 w-4 mr-2" />
+                    <span>Copy JSON</span>
                   </>
                 )}
               </Button>
             </div>
 
-            {/* Live JSON Response */}
+            {/* Endpoint URL Display */}
+            <div className="mt-4 p-3 bg-slate-800 rounded-lg">
+              <code className="text-sm text-slate-300 break-all">{endpointUrl}</code>
+            </div>
+
+            {/* JSON Response Toggle */}
+            <Button
+              variant="ghost"
+              className="w-full mt-4"
+              onClick={toggleJsonResponse}
+              data-testid="button-toggle-json"
+            >
+              {showJsonResponse ? 'Hide' : 'Show'} JSON Response
+            </Button>
+
+            {/* JSON Response Display */}
             {showJsonResponse && response && (
-              <div className="mt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-semibold text-slate-300">API Response:</h4>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="p-1 h-8 w-8"
-                    onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
-                    data-testid="button-copy-json"
-                  >
-                    {copiedJson ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-                  </Button>
-                </div>
-                <pre className="bg-slate-800 rounded-lg p-3 text-xs text-slate-300 overflow-x-auto border border-slate-600">
-                  <code data-testid="json-response">
-{JSON.stringify(response, null, 2)}
-                  </code>
+              <div className="mt-4 p-3 bg-slate-800 rounded-lg max-h-96 overflow-auto">
+                <pre className="text-xs text-slate-300">
+                  <code>{JSON.stringify(response, null, 2)}</code>
                 </pre>
               </div>
             )}
           </CardContent>
         </Card>
-
-        {/* Footer */}
-        <footer className="text-center mt-8 text-slate-500 text-sm">
-          <p>Made by Ibrahim Adams • Compatible with Bwm xmd</p>
-        </footer>
       </div>
     </div>
   );
