@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
@@ -34,6 +34,7 @@ export default function Home() {
   const [showJsonResponse, setShowJsonResponse] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
 
@@ -51,14 +52,54 @@ export default function Home() {
 
   const song = response?.data;
 
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      handleNext();
+    };
+
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+
+    return () => {
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+    };
+  }, [song]);
+
   const handleStream = () => {
     if (audioRef.current && song?.links?.stream) {
       if (audioRef.current.paused) {
-        audioRef.current.play();
+        audioRef.current.play().catch(e => {
+          console.error("Playback failed:", e);
+          toast({
+            title: "Playback error",
+            description: "Failed to start playback",
+            variant: "destructive",
+          });
+        });
       } else {
         audioRef.current.pause();
       }
     }
+  };
+
+  const handleNext = () => {
+    setRefreshKey(prev => prev + 1);
+    refetch();
+  };
+
+  const handlePrevious = () => {
+    setRefreshKey(prev => prev + 1);
+    refetch();
   };
 
   const handleDownload = () => {
@@ -172,7 +213,14 @@ export default function Home() {
                 </div>
 
                 {/* Audio Player */}
-                <MusicPlayer audioRef={audioRef} streamUrl={song.links.stream} />
+                <MusicPlayer 
+                  audioRef={audioRef} 
+                  streamUrl={song.links.stream}
+                  onPlayPause={handleStream}
+                  onNext={handleNext}
+                  onPrevious={handlePrevious}
+                  isPlaying={isPlaying}
+                />
 
                 {/* Action Buttons */}
                 <div className="space-y-3 mb-6">
@@ -181,8 +229,20 @@ export default function Home() {
                     className="btn-primary w-full py-3 px-6 rounded-xl font-semibold text-white flex items-center justify-center space-x-2"
                     data-testid="button-stream"
                   >
-                    <Play className="h-4 w-4" />
-                    <span>Stream Now</span>
+                    {isPlaying ? (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="6" y="4" width="4" height="16"></rect>
+                          <rect x="14" y="4" width="4" height="16"></rect>
+                        </svg>
+                        <span>Pause</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="h-4 w-4" />
+                        <span>Play Now</span>
+                      </>
+                    )}
                   </Button>
                   
                   <Button 
@@ -195,16 +255,31 @@ export default function Home() {
                   </Button>
                 </div>
 
-                {/* Refresh Button */}
-                <Button 
-                  onClick={handleRefresh}
-                  variant="outline"
-                  className="w-full py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 border-slate-600"
-                  data-testid="button-refresh"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  <span>Get Another Random Song</span>
-                </Button>
+                {/* Navigation Buttons */}
+                <div className="flex gap-3 mb-4">
+                  <Button 
+                    onClick={handlePrevious}
+                    variant="outline"
+                    className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 border-slate-600"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                      <polygon points="19 20 9 12 19 4 19 20"></polygon>
+                      <line x1="5" y1="19" x2="5" y2="5"></line>
+                    </svg>
+                    <span>Previous</span>
+                  </Button>
+                  <Button 
+                    onClick={handleNext}
+                    variant="outline"
+                    className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium text-slate-300 border-slate-600"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2">
+                      <polygon points="5 4 15 12 5 20 5 4"></polygon>
+                      <line x1="19" y1="5" x2="19" y2="19"></line>
+                    </svg>
+                    <span>Next</span>
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -236,75 +311,75 @@ export default function Home() {
         </div>
 
         {/* API Documentation */}
-<Card className="glass border-slate-700 w-full max-w-lg mx-auto mt-8">
-  <CardContent className="p-6">
-    <h3 className="font-bold text-lg mb-4 gradient-text">API Endpoint</h3>
-    
-    {/* Action Buttons */}
-    <div className="flex gap-3">
-      <Button
-        variant="outline"
-        className="flex-1"
-        onClick={() => copyToClipboard(endpointUrl, 'url')}
-        data-testid="button-copy-url"
-      >
-        {copiedUrl ? (
-          <>
-            <Check className="h-4 w-4 mr-2" />
-            <span>Copied!</span>
-          </>
-        ) : (
-          <>
-            <Copy className="h-4 w-4 mr-2" />
-            <span>Copy Endpoint</span>
-          </>
-        )}
-      </Button>
-      
-      <Button
-        variant="outline"
-        className="flex-1"
-        onClick={toggleJsonResponse}
-        data-testid="button-test-endpoint"
-      >
-        {showJsonResponse ? (
-          <>
-            <Check className="h-4 w-4 mr-2" />
-            <span>Response Shown</span>
-          </>
-        ) : (
-          <>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            <span>Test Endpoint</span>
-          </>
-        )}
-      </Button>
-    </div>
+        <Card className="glass border-slate-700 w-full max-w-lg mx-auto mt-8">
+          <CardContent className="p-6">
+            <h3 className="font-bold text-lg mb-4 gradient-text">API Endpoint</h3>
+            
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => copyToClipboard(endpointUrl, 'url')}
+                data-testid="button-copy-url"
+              >
+                {copiedUrl ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4 mr-2" />
+                    <span>Copy Endpoint</span>
+                  </>
+                )}
+              </Button>
+              
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={toggleJsonResponse}
+                data-testid="button-test-endpoint"
+              >
+                {showJsonResponse ? (
+                  <>
+                    <Check className="h-4 w-4 mr-2" />
+                    <span>Response Shown</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    <span>Test Endpoint</span>
+                  </>
+                )}
+              </Button>
+            </div>
 
-    {/* Live JSON Response */}
-    {showJsonResponse && response && (
-      <div className="mt-4">
-        <div className="flex items-center justify-between mb-2">
-          <h4 className="text-sm font-semibold text-slate-300">API Response:</h4>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="p-1 h-8 w-8"
-            onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
-            data-testid="button-copy-json"
-          >
-            {copiedJson ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
-          </Button>
-        </div>
-        <pre className="bg-slate-800 rounded-lg p-3 text-xs text-slate-300 overflow-x-auto border border-slate-600">
-          <code data-testid="json-response">
+            {/* Live JSON Response */}
+            {showJsonResponse && response && (
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-semibold text-slate-300">API Response:</h4>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="p-1 h-8 w-8"
+                    onClick={() => copyToClipboard(JSON.stringify(response, null, 2), 'json')}
+                    data-testid="button-copy-json"
+                  >
+                    {copiedJson ? <Check className="h-3 w-3 text-green-400" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+                <pre className="bg-slate-800 rounded-lg p-3 text-xs text-slate-300 overflow-x-auto border border-slate-600">
+                  <code data-testid="json-response">
 {JSON.stringify(response, null, 2)}
-          </code>
-        </pre>
-      </div>
-    )}
-  </CardContent>
-</Card>
+                  </code>
+                </pre>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Footer */}
         <footer className="text-center mt-8 text-slate-500 text-sm">
