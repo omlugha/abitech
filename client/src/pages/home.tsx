@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AnimatedBackground } from "@/components/AnimatedBackground";
 import { MusicPlayer } from "@/components/MusicPlayer";
-import { Play, Download, RefreshCw, Globe, MessageCircle, Copy, Check } from "lucide-react";
+import { Download, RefreshCw, Globe, MessageCircle, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ApiResponse {
@@ -35,8 +35,7 @@ export default function Home() {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedJson, setCopiedJson] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hasUserInteracted, setHasUserInteracted] = useState(false);
-  const [autoPlayEnabled, setAutoPlayEnabled] = useState(false);
+  const [autoPlayActive, setAutoPlayActive] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
 
@@ -54,155 +53,142 @@ export default function Home() {
 
   const song = response?.data;
 
-  // Handle user interaction for auto-play policy
+  // Enable auto-play after first user interaction
   useEffect(() => {
-    const handleUserInteraction = () => {
-      setHasUserInteracted(true);
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
+    const enableAutoPlay = () => {
+      setAutoPlayActive(true);
+      document.removeEventListener('click', enableAutoPlay);
+      document.removeEventListener('keydown', enableAutoPlay);
+      document.removeEventListener('touchstart', enableAutoPlay);
     };
 
-    document.addEventListener('click', handleUserInteraction);
-    document.addEventListener('keydown', handleUserInteraction);
+    document.addEventListener('click', enableAutoPlay);
+    document.addEventListener('keydown', enableAutoPlay);
+    document.addEventListener('touchstart', enableAutoPlay);
 
     return () => {
-      document.removeEventListener('click', handleUserInteraction);
-      document.removeEventListener('keydown', handleUserInteraction);
+      document.removeEventListener('click', enableAutoPlay);
+      document.removeEventListener('keydown', enableAutoPlay);
+      document.removeEventListener('touchstart', enableAutoPlay);
     };
   }, []);
 
-  // Handle page visibility change for auto-play when returning
+  // Auto-play every new song that loads
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !song?.links?.stream) return;
+
+    const playNewSong = async () => {
+      try {
+        // Set the new audio source
+        audio.src = song.links.stream;
+        audio.load();
+        
+        // Always try to auto-play the new song
+        if (autoPlayActive) {
+          await audio.play();
+        }
+      } catch (error) {
+        console.error("Auto-play failed:", error);
+        // Try again after a short delay
+        setTimeout(() => {
+          if (audio.paused && autoPlayActive) {
+            audio.play().catch(e => console.error("Retry play failed:", e));
+          }
+        }, 500);
+      }
+    };
+
+    playNewSong();
+  }, [song?.id, autoPlayActive]); // Use song.id to detect actual song changes
+
+  // Audio event listeners for continuous auto-play
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handlePlay = () => {
+      setIsPlaying(true);
+      setAutoPlayActive(true); // Ensure auto-play stays active
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+    };
+
+    const handleEnded = () => {
+      setIsPlaying(false);
+      // Automatically go to next song when current song ends
+      handleNext();
+    };
+
+    const handleCanPlayThrough = () => {
+      // Auto-play when song is ready to play
+      if (autoPlayActive && audio.paused) {
+        audio.play().catch(e => {
+          console.error("Auto-play on canplaythrough failed:", e);
+        });
+      }
+    };
+
+    const handleLoadedData = () => {
+      // Auto-play when song data is loaded
+      if (autoPlayActive && audio.paused) {
+        audio.play().catch(e => {
+          console.error("Auto-play on loadeddata failed:", e);
+        });
+      }
+    };
+
+    audio.addEventListener('play', handlePlay);
+    audio.addEventListener('pause', handlePause);
+    audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('canplaythrough', handleCanPlayThrough);
+    audio.addEventListener('loadeddata', handleLoadedData);
+
+    return () => {
+      audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('pause', handlePause);
+      audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('canplaythrough', handleCanPlayThrough);
+      audio.removeEventListener('loadeddata', handleLoadedData);
+    };
+  }, [autoPlayActive]);
+
+  // Handle page visibility for continuous playback
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && autoPlayEnabled && hasUserInteracted && audioRef.current && song?.links?.stream) {
-        audioRef.current.play().catch(e => {
-          console.error("Auto-play on visibility change failed:", e);
-        });
+      if (!document.hidden && autoPlayActive && audioRef.current && song?.links?.stream) {
+        if (audioRef.current.paused) {
+          audioRef.current.play().catch(e => {
+            console.error("Auto-play on visibility change failed:", e);
+          });
+        }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [autoPlayEnabled, hasUserInteracted, song]);
-
-  // Auto-play new songs when they load
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !song?.links?.stream) return;
-
-    // Update audio source
-    audio.src = song.links.stream;
-    audio.load();
-    
-    // Auto-start playing if auto-play is enabled
-    if (autoPlayEnabled && hasUserInteracted) {
-      const playPromise = audio.play();
-      
-      if (playPromise !== undefined) {
-        playPromise
-          .then(() => {
-            // Audio started successfully
-          })
-          .catch(e => {
-            console.error("Auto-play failed:", e);
-            setIsPlaying(false);
-          });
-      }
-    }
-  }, [song?.links?.stream, autoPlayEnabled, hasUserInteracted]);
-
-  // Audio event listeners - only for actual audio state, not for UI updates
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const handleEnded = () => {
-      setIsPlaying(false);
-      // Auto-next to continue playing all songs
-      handleNext();
-    };
-
-    const handlePlay = () => {
-      // Only update if we're not already showing playing state
-      if (!isPlaying) {
-        setIsPlaying(true);
-      }
-    };
-
-    const handlePause = () => {
-      // Only update if we're not already showing paused state
-      if (isPlaying) {
-        setIsPlaying(false);
-      }
-    };
-
-    const handleCanPlay = () => {
-      // Auto-play when can play if auto-play is enabled
-      if (autoPlayEnabled && hasUserInteracted && audio.paused) {
-        audio.play().catch(e => {
-          console.error("Auto-play on canplay failed:", e);
-        });
-      }
-    };
-
-    audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('play', handlePlay);
-    audio.addEventListener('pause', handlePause);
-    audio.addEventListener('canplay', handleCanPlay);
-
-    return () => {
-      audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('play', handlePlay);
-      audio.removeEventListener('pause', handlePause);
-      audio.removeEventListener('canplay', handleCanPlay);
-    };
-  }, [autoPlayEnabled, hasUserInteracted, isPlaying]);
-
-  const handleStream = () => {
-    if (audioRef.current && song?.links?.stream) {
-      setHasUserInteracted(true);
-      
-      if (audioRef.current.paused) {
-        // Immediately update UI to show pause button
-        setIsPlaying(true);
-        setAutoPlayEnabled(true); // Enable auto-play for all future songs
-        
-        audioRef.current.play().catch(e => {
-          console.error("Playback failed:", e);
-          setIsPlaying(false); // Revert if play fails
-          toast({
-            title: "Playback error",
-            description: "Failed to start playback",
-            variant: "destructive",
-          });
-        });
-      } else {
-        // Immediately update UI to show play button
-        setIsPlaying(false);
-        audioRef.current.pause();
-      }
-    }
-  };
+  }, [autoPlayActive, song]);
 
   const handleNext = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
-    // Keep auto-play enabled permanently once user has interacted
-    if (hasUserInteracted) {
-      setAutoPlayEnabled(true);
-    }
+    // Ensure auto-play stays active for next song
+    setAutoPlayActive(true);
   };
 
   const handlePrevious = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
-    // Keep auto-play enabled permanently once user has interacted
-    if (hasUserInteracted) {
-      setAutoPlayEnabled(true);
-    }
+    // Ensure auto-play stays active for previous song
+    setAutoPlayActive(true);
   };
 
   const handleDownload = () => {
+    // Enable auto-play on download click (user interaction)
+    setAutoPlayActive(true);
+    
     if (song?.links?.download) {
       const link = document.createElement('a');
       link.href = song.links.download;
@@ -216,9 +202,14 @@ export default function Home() {
   const handleRefresh = () => {
     setRefreshKey(prev => prev + 1);
     refetch();
+    // Ensure auto-play stays active for refreshed song
+    setAutoPlayActive(true);
   };
 
   const copyToClipboard = async (text: string, type: 'url' | 'json') => {
+    // Enable auto-play on copy click (user interaction)
+    setAutoPlayActive(true);
+    
     try {
       await navigator.clipboard.writeText(text);
       if (type === 'url') {
@@ -244,6 +235,8 @@ export default function Home() {
   };
 
   const toggleJsonResponse = () => {
+    // Enable auto-play on toggle click (user interaction)
+    setAutoPlayActive(true);
     setShowJsonResponse(!showJsonResponse);
   };
 
@@ -317,41 +310,27 @@ export default function Home() {
                     </h3>
                     <p className="text-slate-300 text-sm">{song.metadata.source}</p>
                   </div>
+                  
+                  {/* Playing indicator */}
+                  {isPlaying && (
+                    <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-medium flex items-center space-x-1">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                      <span>Playing</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Audio Player */}
                 <MusicPlayer 
                   audioRef={audioRef} 
                   streamUrl={song.links.stream}
-                  onPlayPause={handleStream}
                   onNext={handleNext}
                   onPrevious={handlePrevious}
                   isPlaying={isPlaying}
                 />
 
-                {/* Action Buttons */}
+                {/* Action Buttons - REMOVED PLAY/PAUSE BUTTON */}
                 <div className="space-y-3 mb-6">
-                  <Button 
-                    onClick={handleStream}
-                    className="btn-primary w-full py-3 px-6 rounded-xl font-semibold text-white flex items-center justify-center space-x-2"
-                    data-testid="button-stream"
-                  >
-                    {isPlaying ? (
-                      <>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="6" y="4" width="4" height="16"></rect>
-                          <rect x="14" y="4" width="4" height="16"></rect>
-                        </svg>
-                        <span>Pause</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-4 w-4" />
-                        <span>Play Now</span>
-                      </>
-                    )}
-                  </Button>
-                  
                   <Button 
                     onClick={handleDownload}
                     className="btn-secondary w-full py-3 px-6 rounded-xl font-semibold text-white flex items-center justify-center space-x-2"
