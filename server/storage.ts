@@ -22,7 +22,7 @@ export class MemStorage implements IStorage {
       console.log("Loading thousands of real NCS songs from API...");
       
       // Fetch multiple pages to get thousands of songs
-      const pages = Array.from({length: 10}, (_, i) => i + 1); // First 25 pages (500+ songs)
+      const pages = Array.from({length: 5}, (_, i) => i + 1); // First 25 pages (500+ songs)
       const allSongs: Song[] = [];
 
       for (const page of pages) {
