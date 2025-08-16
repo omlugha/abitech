@@ -2,17 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 
-// Helper function to generate random durations between 1:30 and 5:00
-function generateRandomDuration(): string {
-  const minSeconds = 90; // 1:30 in seconds
-  const maxSeconds = 300; // 5:00 in seconds
-  const randomSeconds = Math.floor(Math.random() * (maxSeconds - minSeconds + 1)) + minSeconds;
-  
-  const minutes = Math.floor(randomSeconds / 60);
-  const seconds = randomSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
-
 export async function registerRoutes(app: Express): Promise<Server> {
   // Add CORS headers for all routes
   app.use((req, res, next) => {
@@ -22,11 +11,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
 
-  // Random song API endpoint
+  // Random song API endpoint - now supports multiple results
   app.get("/random", async (req, res) => {
     try {
-      const count = parseInt(req.query.count as string) || 1;
-      const maxCount = Math.min(count, 50);
+      const count = parseInt(req.query.count as string) || 1; // Default to 1 song
+      const maxCount = Math.min(count, 50); // Limit to 50 songs max per request
       
       const allSongs = await storage.getAllSongs();
       
@@ -37,15 +26,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Get random songs
       const randomSongs = [];
-      const availableSongs = [...allSongs];
+      const availableSongs = [...allSongs]; // Create a copy to avoid duplicates
       
       for (let i = 0; i < maxCount && availableSongs.length > 0; i++) {
         const randomIndex = Math.floor(Math.random() * availableSongs.length);
         randomSongs.push(availableSongs[randomIndex]);
-        availableSongs.splice(randomIndex, 1);
+        availableSongs.splice(randomIndex, 1); // Remove to avoid duplicates
       }
 
+      // Format the response
       const response = {
         status: "success",
         data: randomSongs.map(song => {
@@ -58,7 +49,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: song.title,
             artist: artist,
             track: trackName,
-            duration: song.duration || generateRandomDuration(),
+            duration: song.duration || "", // Added duration field
             links: {
               Bwm_stream_link: song.streamUrl,
               Bwm_download_link: song.downloadUrl,
@@ -70,7 +61,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               format: "MP3",
               quality: "High Quality",
               type: "Bwm xmd release",
-              duration: song.duration || generateRandomDuration()
+              duration: song.duration || "Below 5 minutes" // Also in metadata for consistency
             }
           };
         }),
@@ -120,7 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: song.title,
             artist: artist,
             track: trackName,
-            duration: song.duration || generateRandomDuration(),
+            duration: song.duration || "", // Added duration field
             links: {
               Bwm_stream_link: song.streamUrl,
               Bwm_download_link: song.downloadUrl,
@@ -132,7 +123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               format: "MP3",
               quality: "High Quality",
               type: "Bwm xmd release",
-              duration: song.duration || generateRandomDuration()
+              duration: song.duration || "Below 5 minutes" // Also in metadata for consistency
             }
           };
         }),
@@ -155,7 +146,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Health check endpoint (unchanged)
+  // Health check endpoint
   app.get("/health", (req, res) => {
     const response = {
       status: "online",
@@ -187,7 +178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       ],
       version: "2.1",
-      server_duration: process.uptime() + " seconds"
+      server_duration: process.uptime() + " seconds" // Added server uptime duration
     };
     res.setHeader('Content-Type', 'application/json');
     res.send(JSON.stringify(response, null, 2));
@@ -196,3 +187,5 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   return httpServer;
 }
+
+still is just say unknown in duration ok just do this be getting random duration not about 5 : 5 and not below 1 : 30
