@@ -60,7 +60,7 @@ export default function Home() {
           
           <p className="text-slate-400">
             {redirecting ? (
-              "Opening BWM XMD Player..."
+              "Opening Bwm xmd ncs..."
             ) : (
               "Preparing the ultimate music experience..."
             )}
