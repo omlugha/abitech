@@ -38,7 +38,7 @@ export class MemStorage implements IStorage {
                 const artistNames = ncsTrack.artists ? ncsTrack.artists.map((artist: any) => artist.name).join(', ') : 'Unknown Artist';
                 const song: Song = {
                   id: randomUUID(),
-                  title: `${artistNames} - ${ncsTrack.name} [NCS Release]`,
+                  title: `${artistNames} - ${ncsTrack.name} [BWM XMD]`,
                   streamUrl: ncsTrack.previewUrl || ncsTrack.download.regular || "",
                   downloadUrl: ncsTrack.download.regular || "",
                   thumbnailUrl: ncsTrack.coverUrl || "",
@@ -120,7 +120,7 @@ export class MemStorage implements IStorage {
             const artistNames = ncsTrack.artists ? ncsTrack.artists.map((artist: any) => artist.name).join(', ') : 'Unknown Artist';
             return {
               id: randomUUID(),
-              title: `${artistNames} - ${ncsTrack.name} [NCS Release]`,
+              title: `${artistNames} - ${ncsTrack.name} [BWM XMD]`,
               streamUrl: ncsTrack.previewUrl || ncsTrack.download.regular || "",
               downloadUrl: ncsTrack.download.regular || "",
               thumbnailUrl: ncsTrack.coverUrl || "",
