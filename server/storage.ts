@@ -25,7 +25,7 @@ export class MemStorage implements IStorage {
       }
       
       // Fetch multiple pages to get thousands of songs
-      const pages = Array.from({length: 25}, (_, i) => i + 1); // First 10 pages
+      const pages = Array.from({length: 25}, (_, i) => i + 1); // First 25 pages
       const allSongs: Song[] = [];
 
       for (const page of pages) {
@@ -41,7 +41,8 @@ export class MemStorage implements IStorage {
                   title: `${artistNames} - ${ncsTrack.name} [NCS Release]`,
                   streamUrl: ncsTrack.previewUrl || ncsTrack.download.regular || "",
                   downloadUrl: ncsTrack.download.regular || "",
-                  thumbnailUrl: ncsTrack.coverUrl || ""
+                  thumbnailUrl: ncsTrack.coverUrl || "",
+                  duration: this.formatDuration(ncsTrack.duration) // Add duration from API
                 };
 
                 // Only add songs with valid URLs
@@ -68,6 +69,20 @@ export class MemStorage implements IStorage {
       console.error("Error loading NCS songs:", error);
       await this.seedWithFallbackData();
     }
+  }
+
+  private formatDuration(durationInSeconds: number | string): string {
+    if (!durationInSeconds) return "Unknown";
+    
+    const seconds = typeof durationInSeconds === 'string' 
+      ? parseInt(durationInSeconds) 
+      : durationInSeconds;
+    
+    if (isNaN(seconds)) return "Unknown";
+
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
   private async seedWithFallbackData(): Promise<void> {
@@ -108,7 +123,8 @@ export class MemStorage implements IStorage {
               title: `${artistNames} - ${ncsTrack.name} [NCS Release]`,
               streamUrl: ncsTrack.previewUrl || ncsTrack.download.regular || "",
               downloadUrl: ncsTrack.download.regular || "",
-              thumbnailUrl: ncsTrack.coverUrl || ""
+              thumbnailUrl: ncsTrack.coverUrl || "",
+              duration: this.formatDuration(ncsTrack.duration) // Add duration
             };
           }
         }
