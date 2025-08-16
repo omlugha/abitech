@@ -50,8 +50,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             artist: artist,
             track: trackName,
             links: {
-              stream: song.streamUrl,
-              download: song.downloadUrl,
+              Bwm_stream_link: song.streamUrl,
+              Bwm_download_link: song.downloadUrl,
               thumbnail: song.thumbnailUrl
             },
             metadata: {
@@ -110,8 +110,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             artist: artist,
             track: trackName,
             links: {
-              stream: song.streamUrl,
-              download: song.downloadUrl,
+              Bwm_stream_link: song.streamUrl,
+              Bwm_download_link: song.downloadUrl,
               thumbnail: song.thumbnailUrl
             },
             metadata: {
