@@ -187,5 +187,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   return httpServer;
 }
-
-still is just say unknown in duration ok just do this be getting random duration not about 5 : 5 and not below 1 : 30
