@@ -11,7 +11,7 @@ export interface IStorage {
 export class MemStorage implements IStorage {
   private songs: Song[] = [];
   private lastFetch: number = 0;
-  private readonly CACHE_DURATION = 1000 * 60 * 30; // 30 minutes
+  private readonly CACHE_DURATION = 1000 * 60 * 60 * 24; // 24 hours
 
   constructor() {
     this.loadInitialSongs();
@@ -19,15 +19,17 @@ export class MemStorage implements IStorage {
 
   private async loadInitialSongs(): Promise<void> {
     try {
-    //  console.log("Loading thousands of real NCS songs from API...");
+      // Don't load if we already have songs and cache is still valid
+      if (this.songs.length > 0 && Date.now() - this.lastFetch < this.CACHE_DURATION) {
+        return;
+      }
       
       // Fetch multiple pages to get thousands of songs
-      const pages = Array.from({length: 10}, (_, i) => i + 1); // First 25 pages (500+ songs)
+      const pages = Array.from({length: 25}, (_, i) => i + 1); // First 10 pages
       const allSongs: Song[] = [];
 
       for (const page of pages) {
         try {
-         // console.log(`Fetching NCS page ${page}...`);
           const ncsResponse = await ncs.getSongs(page);
           
           if (ncsResponse && Array.isArray(ncsResponse)) {
@@ -50,14 +52,14 @@ export class MemStorage implements IStorage {
             }
           }
         } catch (pageError) {
-          // console.error(`Error fetching page ${page}:`, pageError);
+          console.error(`Error fetching page ${page}:`, pageError);
         }
       }
 
       if (allSongs.length > 0) {
         this.songs = allSongs;
         this.lastFetch = Date.now();
-        // console.log(`Successfully loaded ${this.songs.length} real NCS songs`);
+        console.log(`Successfully loaded ${this.songs.length} real NCS songs`);
       } else {
         console.warn("No songs loaded, falling back to manual seed");
         await this.seedWithFallbackData();
@@ -82,7 +84,7 @@ export class MemStorage implements IStorage {
   private async refreshSongsIfNeeded(): Promise<void> {
     const now = Date.now();
     if (now - this.lastFetch > this.CACHE_DURATION) {
-      console.log("Refreshing NCS songs cache...");
+      console.log("Refreshing NCS songs cache after 24 hours...");
       await this.loadInitialSongs();
     }
   }
