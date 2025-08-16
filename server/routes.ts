@@ -55,11 +55,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               thumbnail: song.thumbnailUrl
             },
             metadata: {
-              source: "No Copyright Sounds (NCS)",
-              license: "Copyright Free",
+              source: "Bwm xmd tech",
+              license: "Copyright Free by xmd",
               format: "MP3",
               quality: "High Quality",
-              type: "NCS Release"
+              type: "Bwm xmd release"
             }
           };
         }),
@@ -115,11 +115,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               thumbnail: song.thumbnailUrl
             },
             metadata: {
-              source: "No Copyright Sounds (NCS)",
-              license: "Copyright Free",
+              source: "Bwm xmd tech",
+              license: "Copyright Free by xmd",
               format: "MP3",
               quality: "High Quality",
-              type: "NCS Release"
+              type: "Bwm xmd release"
             }
           };
         }),
