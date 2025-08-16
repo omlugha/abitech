@@ -49,7 +49,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: song.title,
             artist: artist,
             track: trackName,
-            duration: song.duration || "Unknown", // Added duration field
+            duration: song.duration || "", // Added duration field
             links: {
               Bwm_stream_link: song.streamUrl,
               Bwm_download_link: song.downloadUrl,
@@ -61,7 +61,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               format: "MP3",
               quality: "High Quality",
               type: "Bwm xmd release",
-              duration: song.duration || "Unknown" // Also in metadata for consistency
+              duration: song.duration || "" // Also in metadata for consistency
             }
           };
         }),
@@ -111,7 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: song.title,
             artist: artist,
             track: trackName,
-            duration: song.duration || "Unknown", // Added duration field
+            duration: song.duration || "", // Added duration field
             links: {
               Bwm_stream_link: song.streamUrl,
               Bwm_download_link: song.downloadUrl,
@@ -123,7 +123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               format: "MP3",
               quality: "High Quality",
               type: "Bwm xmd release",
-              duration: song.duration || "Unknown" // Also in metadata for consistency
+              duration: song.duration || "" // Also in metadata for consistency
             }
           };
         }),
