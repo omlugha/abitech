@@ -19,15 +19,15 @@ export class MemStorage implements IStorage {
 
   private async loadInitialSongs(): Promise<void> {
     try {
-      console.log("Loading thousands of real NCS songs from API...");
+    //  console.log("Loading thousands of real NCS songs from API...");
       
       // Fetch multiple pages to get thousands of songs
-      const pages = Array.from({length: 25}, (_, i) => i + 1); // First 25 pages (500+ songs)
+      const pages = Array.from({length: 10}, (_, i) => i + 1); // First 25 pages (500+ songs)
       const allSongs: Song[] = [];
 
       for (const page of pages) {
         try {
-          console.log(`Fetching NCS page ${page}...`);
+         // console.log(`Fetching NCS page ${page}...`);
           const ncsResponse = await ncs.getSongs(page);
           
           if (ncsResponse && Array.isArray(ncsResponse)) {
@@ -50,14 +50,14 @@ export class MemStorage implements IStorage {
             }
           }
         } catch (pageError) {
-          console.error(`Error fetching page ${page}:`, pageError);
+          // console.error(`Error fetching page ${page}:`, pageError);
         }
       }
 
       if (allSongs.length > 0) {
         this.songs = allSongs;
         this.lastFetch = Date.now();
-        console.log(`Successfully loaded ${this.songs.length} real NCS songs`);
+        // console.log(`Successfully loaded ${this.songs.length} real NCS songs`);
       } else {
         console.warn("No songs loaded, falling back to manual seed");
         await this.seedWithFallbackData();
