@@ -11,57 +11,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
 
-  // Random song API endpoint
+  // Random song API endpoint - now supports multiple results
   app.get("/random", async (req, res) => {
     try {
-      const randomSong = await storage.getRandomSong();
+      const count = parseInt(req.query.count as string) || 1; // Default to 10 songs
+      const maxCount = Math.min(count, 50); // Limit to 50 songs max per request
       
-      if (!randomSong) {
+      const allSongs = await storage.getAllSongs();
+      
+      if (!allSongs || allSongs.length === 0) {
         return res.status(404).json({ 
           error: "No songs available",
           message: "The song database is currently empty"
         });
       }
 
-      // Extract artist from title properly  
-      const titleParts = randomSong.title.split(" - ");
-      const artist = titleParts.length > 1 ? titleParts[0] : "Unknown Artist";
-      const trackName = titleParts.length > 1 ? titleParts.slice(1).join(" - ") : randomSong.title;
+      // Get random songs
+      const randomSongs = [];
+      const availableSongs = [...allSongs]; // Create a copy to avoid duplicates
+      
+      for (let i = 0; i < maxCount && availableSongs.length > 0; i++) {
+        const randomIndex = Math.floor(Math.random() * availableSongs.length);
+        randomSongs.push(availableSongs[randomIndex]);
+        availableSongs.splice(randomIndex, 1); // Remove to avoid duplicates
+      }
 
-      // Return well-formatted JSON response
+      // Format the response
       const response = {
         status: "success",
-        data: {
-          id: randomSong.id,
-          title: randomSong.title,
-          artist: artist,
-          track: trackName,
-          links: {
-            stream: randomSong.streamUrl,
-            download: randomSong.downloadUrl,
-            thumbnail: randomSong.thumbnailUrl
-          },
-          metadata: {
-            source: "No Copyright Sounds (NCS)",
-            license: "Copyright Free",
-            format: "MP3",
-            quality: "High Quality",
-            type: "NCS Release"
-          }
-        },
+        data: randomSongs.map(song => {
+          const titleParts = song.title.split(" - ");
+          const artist = titleParts.length > 1 ? titleParts[0] : "Unknown Artist";
+          const trackName = titleParts.length > 1 ? titleParts.slice(1).join(" - ") : song.title;
+
+          return {
+            id: song.id,
+            title: song.title,
+            artist: artist,
+            track: trackName,
+            links: {
+              stream: song.streamUrl,
+              download: song.downloadUrl,
+              thumbnail: song.thumbnailUrl
+            },
+            metadata: {
+              source: "No Copyright Sounds (NCS)",
+              license: "Copyright Free",
+              format: "MP3",
+              quality: "High Quality",
+              type: "NCS Release"
+            }
+          };
+        }),
+        count: randomSongs.length,
+        total_available: allSongs.length,
         timestamp: new Date().toISOString(),
         endpoint: "/random",
-        version: "2.0"
+        version: "2.1"
       };
 
-      // Use JSON.stringify with proper indentation for pretty printing
       res.setHeader('Content-Type', 'application/json');
       res.send(JSON.stringify(response, null, 2));
     } catch (error) {
-      console.error("Error fetching random song:", error);
+      console.error("Error fetching random songs:", error);
       res.status(500).json({ 
         error: "Internal server error",
-        message: "Failed to fetch random song"
+        message: "Failed to fetch random songs"
+      });
+    }
+  });
+
+  // Search endpoint
+  app.get("/search", async (req, res) => {
+    try {
+      const query = req.query.q as string;
+      if (!query) {
+        return res.status(400).json({
+          error: "Missing search query",
+          message: "Please provide a search term using the 'q' parameter"
+        });
+      }
+
+      const allSongs = await storage.getAllSongs();
+      const searchResults = allSongs.filter(song => 
+        song.title.toLowerCase().includes(query.toLowerCase())
+      );
+
+      const response = {
+        status: "success",
+        data: searchResults.map(song => {
+          const titleParts = song.title.split(" - ");
+          const artist = titleParts.length > 1 ? titleParts[0] : "Unknown Artist";
+          const trackName = titleParts.length > 1 ? titleParts.slice(1).join(" - ") : song.title;
+
+          return {
+            id: song.id,
+            title: song.title,
+            artist: artist,
+            track: trackName,
+            links: {
+              stream: song.streamUrl,
+              download: song.downloadUrl,
+              thumbnail: song.thumbnailUrl
+            },
+            metadata: {
+              source: "No Copyright Sounds (NCS)",
+              license: "Copyright Free",
+              format: "MP3",
+              quality: "High Quality",
+              type: "NCS Release"
+            }
+          };
+        }),
+        query: query,
+        count: searchResults.length,
+        total_available: allSongs.length,
+        timestamp: new Date().toISOString(),
+        endpoint: "/search",
+        version: "2.1"
+      };
+
+      res.setHeader('Content-Type', 'application/json');
+      res.send(JSON.stringify(response, null, 2));
+    } catch (error) {
+      console.error("Error searching songs:", error);
+      res.status(500).json({ 
+        error: "Internal server error",
+        message: "Failed to perform search"
       });
     }
   });
@@ -70,7 +146,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/health", (req, res) => {
     const response = {
       status: "online",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      endpoints: [
+        {
+          path: "/random",
+          description: "Get random NCS songs",
+          parameters: [
+            {
+              name: "count",
+              type: "number",
+              description: "Number of random songs to return (default: 10, max: 50)",
+              optional: true
+            }
+          ]
+        },
+        {
+          path: "/search",
+          description: "Search NCS songs",
+          parameters: [
+            {
+              name: "q",
+              type: "string",
+              description: "Search query",
+              required: true
+            }
+          ]
+        }
+      ],
+      version: "2.1"
     };
     res.setHeader('Content-Type', 'application/json');
     res.send(JSON.stringify(response, null, 2));
