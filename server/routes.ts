@@ -14,7 +14,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Random song API endpoint - now supports multiple results
   app.get("/random", async (req, res) => {
     try {
-      const count = parseInt(req.query.count as string) || 1; // Default to 10 songs
+      const count = parseInt(req.query.count as string) || 1; // Default to 1 song
       const maxCount = Math.min(count, 50); // Limit to 50 songs max per request
       
       const allSongs = await storage.getAllSongs();
@@ -49,6 +49,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: song.title,
             artist: artist,
             track: trackName,
+            duration: song.duration || "Unknown", // Added duration field
             links: {
               Bwm_stream_link: song.streamUrl,
               Bwm_download_link: song.downloadUrl,
@@ -59,7 +60,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               license: "Copyright Free by xmd",
               format: "MP3",
               quality: "High Quality",
-              type: "Bwm xmd release"
+              type: "Bwm xmd release",
+              duration: song.duration || "Unknown" // Also in metadata for consistency
             }
           };
         }),
@@ -109,6 +111,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: song.title,
             artist: artist,
             track: trackName,
+            duration: song.duration || "Unknown", // Added duration field
             links: {
               Bwm_stream_link: song.streamUrl,
               Bwm_download_link: song.downloadUrl,
@@ -119,7 +122,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               license: "Copyright Free by xmd",
               format: "MP3",
               quality: "High Quality",
-              type: "Bwm xmd release"
+              type: "Bwm xmd release",
+              duration: song.duration || "Unknown" // Also in metadata for consistency
             }
           };
         }),
@@ -155,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             {
               name: "count",
               type: "number",
-              description: "Number of random songs to return (default: 10, max: 50)",
+              description: "Number of random songs to return (default: 1, max: 50)",
               optional: true
             }
           ]
@@ -173,7 +177,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ]
         }
       ],
-      version: "2.1"
+      version: "2.1",
+      server_duration: process.uptime() + " seconds" // Added server uptime duration
     };
     res.setHeader('Content-Type', 'application/json');
     res.send(JSON.stringify(response, null, 2));
