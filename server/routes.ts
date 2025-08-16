@@ -61,7 +61,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               format: "MP3",
               quality: "High Quality",
               type: "Bwm xmd release",
-              duration: song.duration || "" // Also in metadata for consistency
+              duration: song.duration || "⚡" // Also in metadata for consistency
             }
           };
         }),
@@ -123,7 +123,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               format: "MP3",
               quality: "High Quality",
               type: "Bwm xmd release",
-              duration: song.duration || "" // Also in metadata for consistency
+              duration: song.duration || "⚡" // Also in metadata for consistency
             }
           };
         }),
